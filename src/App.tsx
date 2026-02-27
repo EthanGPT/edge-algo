@@ -12,6 +12,8 @@ import { Paywall } from "@/components/Paywall";
 import Landing from "./pages/Landing";
 import Courses from "./pages/Courses";
 import Purchase from "./pages/Purchase";
+import Backtest from "./pages/Backtest";
+import EdgeCourse from "./pages/EdgeCourse";
 
 // Member pages
 import MemberHub from "./pages/MemberHub";
@@ -45,6 +47,7 @@ const App = () => (
               <Route path="/" element={<Landing />} />
               <Route path="/courses" element={<Courses />} />
               <Route path="/purchase" element={<Purchase />} />
+              <Route path="/backtest" element={<Backtest />} />
 
               {/* Member routes - with sidebar */}
               <Route
@@ -110,6 +113,16 @@ const App = () => (
                 element={
                   <AppLayout>
                     <Discord />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/course"
+                element={
+                  <AppLayout>
+                    <Paywall title="Strategy Guide is a Member Benefit" description="Get the complete KLBS strategy with optimized parameters and verified backtest results.">
+                      <EdgeCourse />
+                    </Paywall>
                   </AppLayout>
                 }
               />

@@ -3,11 +3,19 @@ import { useEffect, useState, useRef } from "react";
 import { PublicNavbar } from "@/components/layout/PublicNavbar";
 import { Footer } from "@/components/layout/PublicLayout";
 import { Liveline } from "liveline";
+import {
+  BACKTEST_HIGHLIGHTS,
+  COMBINED_STATS,
+  YEARLY_STATS,
+  INSTRUMENT_STATS,
+  BACKTEST_CONFIG,
+} from "@/data/backtestStats";
 
 export default function Landing() {
   return (
     <div className="min-h-screen">
       <HeroSection />
+      <BacktestShowcase />
       <LivelineSection />
       <FeaturesSection />
       <AboutSection />
@@ -86,16 +94,16 @@ function HeroSection() {
           <div className="flex items-center gap-8 md:gap-12">
             <div className="flex items-baseline gap-2">
               <span className="font-display text-2xl font-bold text-[#0a0a0a]">
-                73%
+                {BACKTEST_HIGHLIGHTS.totalPnl}
               </span>
               <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#888]">
-                WIN RATE
+                PROFIT
               </span>
             </div>
             <div className="h-6 w-px bg-[#0a0a0a]/20 hidden md:block" />
             <div className="flex items-baseline gap-2">
               <span className="font-display text-2xl font-bold text-[#0a0a0a]">
-                847
+                {BACKTEST_HIGHLIGHTS.totalTrades}
               </span>
               <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#888]">
                 TRADES
@@ -104,10 +112,10 @@ function HeroSection() {
             <div className="h-6 w-px bg-[#0a0a0a]/20 hidden md:block" />
             <div className="flex items-baseline gap-2">
               <span className="font-display text-2xl font-bold text-[#0a0a0a]">
-                2YR
+                {BACKTEST_HIGHLIGHTS.dataYears}
               </span>
               <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#888]">
-                DATA
+                YEARS DATA
               </span>
             </div>
           </div>
@@ -117,6 +125,183 @@ function HeroSection() {
             Simulated results. Past performance ≠ future results.
           </p>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function BacktestShowcase() {
+  return (
+    <section className="bg-[#080808] px-[60px] py-[100px]">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-16">
+          <p className="font-mono text-[10px] tracking-[0.2em] text-[#c8f54a] uppercase mb-4">
+            VERIFIED BACKTEST — {BACKTEST_CONFIG.dataYears} YEARS OF CME DATA
+          </p>
+          <h2 className="font-display text-4xl md:text-5xl font-bold text-[#f5f5f5] uppercase tracking-tight mb-4">
+            The numbers don't lie
+          </h2>
+          <p className="font-mono text-[13px] text-[#888] max-w-xl mx-auto">
+            $100K account. 4 MNQ, 4 MES, 2 MGC. Low risk. Real CME data from{" "}
+            {BACKTEST_CONFIG.dataStart.slice(0, 4)} to{" "}
+            {BACKTEST_CONFIG.dataEnd.slice(0, 4)}. Every trade executed exactly
+            as the indicator signals.
+          </p>
+        </div>
+
+        {/* Big Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-[#1f1f1f] mb-12">
+          <div className="bg-[#0d0d0d] p-8 text-center">
+            <p className="font-display text-4xl md:text-5xl font-bold text-[#c8f54a]">
+              {BACKTEST_HIGHLIGHTS.totalPnl}
+            </p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#666] mt-2">
+              Total Profit
+            </p>
+          </div>
+          <div className="bg-[#0d0d0d] p-8 text-center">
+            <p className="font-display text-4xl md:text-5xl font-bold text-[#f5f5f5]">
+              {BACKTEST_HIGHLIGHTS.totalReturn}
+            </p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#666] mt-2">
+              Return on $100K
+            </p>
+          </div>
+          <div className="bg-[#0d0d0d] p-8 text-center">
+            <p className="font-display text-4xl md:text-5xl font-bold text-[#f5f5f5]">
+              {BACKTEST_HIGHLIGHTS.winRate}
+            </p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#666] mt-2">
+              Win Rate
+            </p>
+          </div>
+          <div className="bg-[#0d0d0d] p-8 text-center">
+            <p className="font-display text-4xl md:text-5xl font-bold text-[#f5f5f5]">
+              {BACKTEST_HIGHLIGHTS.profitableYears}
+            </p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#666] mt-2">
+              Years Profitable
+            </p>
+          </div>
+        </div>
+
+        {/* Year-by-Year Performance */}
+        <div className="bg-[#0d0d0d] border border-[#1f1f1f] rounded-lg p-8">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-mono text-[11px] uppercase tracking-[0.15em] text-[#c8f54a]">
+              Year-by-Year Performance
+            </h3>
+            <span className="font-mono text-[10px] text-[#666]">
+              Every single year profitable
+            </span>
+          </div>
+
+          {/* Year bars */}
+          <div className="space-y-3">
+            {YEARLY_STATS.filter((y) => y.year < 2026).map((year) => {
+              const maxPnl = Math.max(...YEARLY_STATS.map((y) => y.pnl));
+              const widthPct = (year.pnl / maxPnl) * 100;
+              return (
+                <div key={year.year} className="flex items-center gap-4">
+                  <span className="font-mono text-[12px] text-[#888] w-12">
+                    {year.year}
+                  </span>
+                  <div className="flex-1 h-8 bg-[#1a1a1a] rounded overflow-hidden relative">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#c8f54a] to-[#a8d53a] rounded"
+                      style={{ width: `${widthPct}%` }}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-[#f5f5f5] font-medium">
+                      +${(year.pnl / 1000).toFixed(0)}K
+                    </span>
+                  </div>
+                  <span className="font-mono text-[11px] text-[#888] w-16 text-right">
+                    {year.winRate.toFixed(0)}% WR
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 2026 YTD */}
+          <div className="mt-4 pt-4 border-t border-[#1f1f1f]">
+            <div className="flex items-center gap-4">
+              <span className="font-mono text-[12px] text-[#c8f54a] w-12">
+                2026
+              </span>
+              <span className="font-mono text-[11px] text-[#888]">
+                YTD: +$31K ({YEARLY_STATS.find((y) => y.year === 2026)?.trades}{" "}
+                trades)
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Instrument Breakdown */}
+        <div className="grid md:grid-cols-3 gap-px bg-[#1f1f1f] mt-8">
+          {INSTRUMENT_STATS.map((inst) => (
+            <div key={inst.symbol} className="bg-[#0d0d0d] p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <span className="font-mono text-[10px] text-[#666] uppercase">
+                    {inst.contracts} contracts
+                  </span>
+                  <h4 className="font-display text-lg font-bold text-[#f5f5f5]">
+                    {inst.symbol}
+                  </h4>
+                </div>
+                <span className="font-mono text-xl font-bold text-[#c8f54a]">
+                  +${(inst.totalPnl / 1000).toFixed(0)}K
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="font-mono text-[11px] text-[#f5f5f5]">
+                    {inst.trades.toLocaleString()}
+                  </p>
+                  <p className="font-mono text-[9px] text-[#666] uppercase">
+                    Trades
+                  </p>
+                </div>
+                <div>
+                  <p className="font-mono text-[11px] text-[#c8f54a]">
+                    {inst.winRate.toFixed(1)}%
+                  </p>
+                  <p className="font-mono text-[9px] text-[#666] uppercase">
+                    Win Rate
+                  </p>
+                </div>
+                <div>
+                  <p className="font-mono text-[11px] text-[#f5f5f5]">
+                    {inst.profitFactor.toFixed(2)}
+                  </p>
+                  <p className="font-mono text-[9px] text-[#666] uppercase">
+                    PF
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* CTA */}
+        <div className="text-center mt-12">
+          <Link
+            to="/backtest"
+            className="inline-block border border-[#c8f54a]/50 text-[#c8f54a] font-mono text-[11px] font-medium uppercase tracking-[0.12em] px-8 py-4 transition-all hover:bg-[#c8f54a]/10 hover:border-[#c8f54a]"
+          >
+            View Full Backtest Report →
+          </Link>
+        </div>
+
+        {/* Disclaimer */}
+        <p className="font-mono text-[9px] text-[#555] text-center mt-8 max-w-2xl mx-auto leading-relaxed">
+          DISCLAIMER: These results are from backtesting on historical data.
+          Past performance does not guarantee future results. Slippage,
+          commissions, and fees not included. Trading futures involves
+          substantial risk.
+        </p>
       </div>
     </section>
   );
@@ -306,7 +491,7 @@ function AboutSection() {
           <div className="flex items-center gap-3">
             <div className="w-2 h-2 bg-[#c8f54a]" />
             <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#f5f5f5]">
-              2-year backtest
+              {BACKTEST_CONFIG.dataYears}-year backtest
             </span>
           </div>
           <div className="flex items-center gap-3">

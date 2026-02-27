@@ -9,9 +9,17 @@ import {
   FileText,
   MessageCircle,
   Video,
-  Lock
+  Lock,
+  ExternalLink,
 } from "lucide-react";
 import { useMembership } from "@/context/MembershipContext";
+import {
+  BACKTEST_HIGHLIGHTS,
+  COMBINED_STATS,
+  YEARLY_STATS,
+  INSTRUMENT_STATS,
+  BACKTEST_CONFIG,
+} from "@/data/backtestStats";
 
 export default function MemberHub() {
   const { tier } = useMembership();
@@ -69,8 +77,23 @@ export default function MemberHub() {
           </span>
         </Link>
 
-        {/* Course PDF */}
-        <div className={`stat-card relative ${hasEdgeAccess ? "" : "opacity-75"}`}>
+        {/* Course - HIGHLIGHTED */}
+        <Link
+          to={hasEdgeAccess ? "/course" : "/purchase"}
+          className={`stat-card group relative overflow-hidden transition-all ${
+            hasEdgeAccess
+              ? "border-2 border-gold ring-2 ring-gold/20 hover:ring-gold/40"
+              : "opacity-75"
+          }`}
+        >
+          {/* Important Badge */}
+          {hasEdgeAccess && (
+            <div className="absolute top-0 right-0">
+              <div className="bg-gold text-background text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
+                MUST READ
+              </div>
+            </div>
+          )}
           {!hasEdgeAccess && (
             <div className="absolute top-3 right-3">
               <Lock className="h-4 w-4 text-muted-foreground" />
@@ -79,21 +102,16 @@ export default function MemberHub() {
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gold/20">
             <FileText className="h-5 w-5 text-gold" />
           </div>
-          <h3 className="mt-3 font-semibold text-foreground">Edge Course</h3>
+          <h3 className="mt-3 font-semibold text-foreground">KLBS Strategy Guide</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Key Level Breakout System Guide
+            The complete system with optimized parameters
           </p>
-          <a
-            href={hasEdgeAccess ? "/Edge_Course.pdf" : "#"}
-            target={hasEdgeAccess ? "_blank" : undefined}
-            rel={hasEdgeAccess ? "noopener noreferrer" : undefined}
-            className={`mt-3 inline-flex items-center gap-1 text-xs font-medium ${
-              hasEdgeAccess ? "text-gold hover:underline" : "text-muted-foreground"
-            }`}
-          >
-            {hasEdgeAccess ? "View Course" : "Edge members only"} <ArrowRight className="h-3 w-3" />
-          </a>
-        </div>
+          <span className={`mt-3 inline-flex items-center gap-1 text-xs font-medium group-hover:underline ${
+            hasEdgeAccess ? "text-gold" : "text-muted-foreground"
+          }`}>
+            {hasEdgeAccess ? "Read the Strategy" : "Edge members only"} <ArrowRight className="h-3 w-3" />
+          </span>
+        </Link>
 
         {/* Book 1-on-1 */}
         <Link
@@ -124,40 +142,88 @@ export default function MemberHub() {
 
       {/* Verified Backtest Results */}
       <div className="rounded-lg border border-border bg-card p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Verified Backtest Results</h2>
-            <p className="text-sm text-muted-foreground">Key Level Breakout System — MNQ 15min — 2 Year Period</p>
+            <p className="text-sm text-muted-foreground">
+              Key Level Breakout System — {BACKTEST_CONFIG.dataYears} Years of CME Data
+            </p>
           </div>
-          <div className="rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">
-            VERIFIED
+          <Link
+            to="/backtest"
+            className="flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent hover:bg-accent/30 transition-colors"
+          >
+            VERIFIED <ExternalLink className="h-3 w-3 ml-1" />
+          </Link>
+        </div>
+
+        {/* Big headline stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-background/50 rounded-lg p-4 text-center">
+            <p className="text-3xl font-bold text-accent">{BACKTEST_HIGHLIGHTS.totalPnl}</p>
+            <p className="text-xs text-muted-foreground mt-1">Total Profit</p>
+          </div>
+          <div className="bg-background/50 rounded-lg p-4 text-center">
+            <p className="text-3xl font-bold text-foreground">{BACKTEST_HIGHLIGHTS.totalReturn}</p>
+            <p className="text-xs text-muted-foreground mt-1">Return on $100K</p>
+          </div>
+          <div className="bg-background/50 rounded-lg p-4 text-center">
+            <p className="text-3xl font-bold text-foreground">{BACKTEST_HIGHLIGHTS.totalTrades}</p>
+            <p className="text-xs text-muted-foreground mt-1">Total Trades</p>
+          </div>
+          <div className="bg-background/50 rounded-lg p-4 text-center">
+            <p className="text-3xl font-bold text-foreground">{BACKTEST_HIGHLIGHTS.profitableYears}</p>
+            <p className="text-xs text-muted-foreground mt-1">Years Profitable</p>
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+        {/* Detailed stats row */}
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
           <div className="text-center">
-            <p className="text-2xl font-bold text-foreground">847</p>
-            <p className="text-xs text-muted-foreground">Total Trades</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-accent">73%</p>
+            <p className="text-xl font-bold text-accent">{BACKTEST_HIGHLIGHTS.winRate}</p>
             <p className="text-xs text-muted-foreground">Win Rate</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-foreground">2.4</p>
+            <p className="text-xl font-bold text-foreground">{BACKTEST_HIGHLIGHTS.profitFactor}</p>
             <p className="text-xs text-muted-foreground">Profit Factor</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-accent">+$14,320</p>
-            <p className="text-xs text-muted-foreground">Net Profit (1 MNQ)</p>
+            <p className="text-xl font-bold text-foreground">{BACKTEST_HIGHLIGHTS.avgYearlyReturn}</p>
+            <p className="text-xs text-muted-foreground">Avg Yearly P&L</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-destructive">-$840</p>
-            <p className="text-xs text-muted-foreground">Max Drawdown</p>
+            <p className="text-xl font-bold text-foreground">{BACKTEST_CONFIG.dataYears}</p>
+            <p className="text-xs text-muted-foreground">Years of Data</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-foreground">0.81R</p>
-            <p className="text-xs text-muted-foreground">Avg R per Trade</p>
+            <p className="text-xl font-bold text-foreground">4+4+2</p>
+            <p className="text-xs text-muted-foreground">MNQ+MES+MGC</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xl font-bold text-accent">Low</p>
+            <p className="text-xs text-muted-foreground">Risk Level</p>
+          </div>
+        </div>
+
+        {/* Instrument breakdown mini */}
+        <div className="mt-6 pt-6 border-t border-border">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">By Instrument</p>
+          <div className="grid grid-cols-3 gap-3">
+            {INSTRUMENT_STATS.map((inst) => (
+              <div key={inst.symbol} className="bg-background/30 rounded p-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground">{inst.symbol}</span>
+                  <span className="text-sm font-medium text-accent">
+                    +${(inst.totalPnl / 1000).toFixed(0)}K
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                  <span>{inst.contracts} cts</span>
+                  <span>{inst.winRate.toFixed(0)}% WR</span>
+                  <span>{inst.trades.toLocaleString()} trades</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -212,9 +278,9 @@ export default function MemberHub() {
               </span>
             </div>
             <div className="flex items-center gap-3">
-              <CheckCircle className={`h-4 w-4 ${hasEdgeAccess ? 'text-accent' : 'text-muted-foreground'}`} />
-              <span className={`text-sm ${hasEdgeAccess ? 'text-foreground' : 'text-muted-foreground'}`}>
-                Full Strategy Course (PDF)
+              <CheckCircle className={`h-4 w-4 ${hasEdgeAccess ? 'text-gold' : 'text-muted-foreground'}`} />
+              <span className={`text-sm ${hasEdgeAccess ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                KLBS Strategy Guide (Web + PDF)
               </span>
             </div>
             <div className="flex items-center gap-3">

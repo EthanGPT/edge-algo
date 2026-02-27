@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>KLBS Strategy Comparison — THE EDGE</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#080808; color:#e0e0e0; font-family:'JetBrains Mono',monospace; padding:40px; line-height:1.6; }
+    .header { text-align:center; margin-bottom:40px; padding-bottom:30px; border-bottom:1px solid #222; }
+    h1 { font-size:36px; letter-spacing:4px; margin-bottom:8px; font-weight:700; }
+    .accent { color:#c8f54a; }
+    .green { color:#00c853; }
+    .red { color:#ef5350; }
+    .bold { font-weight:700; }
+    .subtitle { color:#666; font-size:12px; margin-bottom:8px; letter-spacing:2px; }
+    .date-range { color:#888; font-size:14px; margin-top:10px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; background:#0a0a0a; border-radius:8px; overflow:hidden; margin-bottom:30px; }
+    th { background:#111; color:#c8f54a; padding:14px 16px; text-align:left; font-size:11px; letter-spacing:1px; text-transform:uppercase; border-bottom:2px solid #222; }
+    td { padding:12px 16px; border-bottom:1px solid #1a1a1a; }
+    tr:hover td { background:#111; }
+    .totals-row td { background:#111; border-top:2px solid #c8f54a; font-weight:700; }
+    .symbol { color:#c8f54a; font-weight:700; }
+    .section-header { font-size:14px; letter-spacing:2px; color:#c8f54a; margin:50px 0 24px 0; text-transform:uppercase; padding-bottom:12px; border-bottom:1px solid #222; }
+    .summary-box { display:grid; grid-template-columns:repeat(2, 1fr); gap:24px; margin-bottom:40px; }
+    .mode-box { background:#0d0d0d; border:1px solid #1a1a1a; border-radius:12px; padding:24px; text-align:center; }
+    .mode-box h3 { color:#c8f54a; margin-bottom:16px; font-size:14px; }
+    .mode-box .big-number { font-size:42px; font-weight:700; margin-bottom:8px; }
+    .mode-box .label { color:#666; font-size:11px; text-transform:uppercase; }
+    .winner { border-color:#c8f54a; }
+    .conclusion { background:#0d0d0d; border:1px solid #1a1a1a; border-radius:12px; padding:24px; margin-top:40px; }
+    .conclusion h3 { color:#c8f54a; margin-bottom:16px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>THE <span class="accent">EDGE</span></h1>
+    <div class="subtitle">STRATEGY COMPARISON — BREAKEVEN VS TRAIL ONLY</div>
+    <div class="date-range">Data: 2019-06-02 to 2026-02-26</div>
+  </div>
+
+  <div class="summary-box">
+    <div class="mode-box ">
+      <h3>Breakeven + Trail</h3>
+      <div class="big-number green">$763,003</div>
+      <div class="label">Total P&L</div>
+      <div style="margin-top:16px; font-size:13px;">
+        Win Rate: <span class="green">56.4%</span><br>
+        Breakevens: 5,386
+      </div>
+    </div>
+    <div class="mode-box winner">
+      <h3>Trail Only (No BE)</h3>
+      <div class="big-number green">$996,701</div>
+      <div class="label">Total P&L</div>
+      <div style="margin-top:16px; font-size:13px;">
+        Win Rate: <span class="green">55.6%</span><br>
+        Breakevens: 0
+      </div>
+    </div>
+  </div>
+
+  <h2 class="section-header">Per-Instrument Comparison</h2>
+  <table>
+    <thead>
+      <tr>
+        <th rowspan="2">Symbol</th>
+        <th colspan="3" style="text-align:center; border-right:1px solid #333;">BE + Trail</th>
+        <th colspan="3" style="text-align:center; border-right:1px solid #333;">Trail Only</th>
+        <th rowspan="2">Difference</th>
+      </tr>
+      <tr>
+        <th>P&L</th><th>Win Rate</th><th>BE Count</th>
+        <th>P&L</th><th>Win Rate</th><th>BE Count</th>
+      </tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td><span class="symbol">MNQ</span></td>
+          <td class="green">$366,932</td>
+          <td>53.5%</td>
+          <td>2,154</td>
+          <td class="green">$538,688</td>
+          <td>54.3%</td>
+          <td>0</td>
+          <td class="green bold">+171,756 (+46.8%)</td>
+        </tr>
+        <tr>
+          <td><span class="symbol">MES</span></td>
+          <td class="green">$297,275</td>
+          <td>60.5%</td>
+          <td>2,326</td>
+          <td class="green">$340,715</td>
+          <td>57.5%</td>
+          <td>0</td>
+          <td class="green bold">+43,440 (+14.6%)</td>
+        </tr>
+        <tr>
+          <td><span class="symbol">MGC</span></td>
+          <td class="green">$98,796</td>
+          <td>55.0%</td>
+          <td>906</td>
+          <td class="green">$117,298</td>
+          <td>54.1%</td>
+          <td>0</td>
+          <td class="green bold">+18,502 (+18.7%)</td>
+        </tr>
+    <tr class="totals-row">
+      <td><span class="symbol">TOTAL</span></td>
+      <td class="green">$763,003</td>
+      <td>56.4%</td>
+      <td>5,386</td>
+      <td class="green">$996,701</td>
+      <td>55.6%</td>
+      <td>0</td>
+      <td class="green bold">+233,698 (+30.6%)</td>
+    </tr></tbody>
+  </table>
+
+  <h2 class="section-header">Year-over-Year Comparison</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Year</th>
+        <th>BE + Trail P&L</th>
+        <th>Trail Only P&L</th>
+        <th>Difference</th>
+      </tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td>2019</td>
+          <td class="green">$34,722</td>
+          <td class="green">$48,363</td>
+          <td class="green">+13,641</td>
+        </tr>
+        <tr>
+          <td>2020</td>
+          <td class="green">$112,566</td>
+          <td class="green">$143,300</td>
+          <td class="green">+30,734</td>
+        </tr>
+        <tr>
+          <td>2021</td>
+          <td class="green">$67,523</td>
+          <td class="green">$98,458</td>
+          <td class="green">+30,935</td>
+        </tr>
+        <tr>
+          <td>2022</td>
+          <td class="green">$151,204</td>
+          <td class="green">$184,621</td>
+          <td class="green">+33,417</td>
+        </tr>
+        <tr>
+          <td>2023</td>
+          <td class="green">$88,447</td>
+          <td class="green">$130,372</td>
+          <td class="green">+41,925</td>
+        </tr>
+        <tr>
+          <td>2024</td>
+          <td class="green">$111,568</td>
+          <td class="green">$153,777</td>
+          <td class="green">+42,209</td>
+        </tr>
+        <tr>
+          <td>2025</td>
+          <td class="green">$165,553</td>
+          <td class="green">$205,185</td>
+          <td class="green">+39,632</td>
+        </tr>
+        <tr>
+          <td>2026</td>
+          <td class="green">$31,420</td>
+          <td class="green">$32,625</td>
+          <td class="green">+1,205</td>
+        </tr></tbody>
+  </table>
+
+  <div class="conclusion">
+    <h3>Analysis Summary</h3>
+    <p style="color:#888; line-height:1.8;">
+      <strong>Breakeven + Trail Mode:</strong> Moves stop to breakeven at 50% of target, then trails after full target is hit.
+      This protects partial profits but may result in more breakeven exits.<br><br>
+      <strong>Trail Only Mode:</strong> No breakeven protection at halfway. Holds original stop until full target is reached,
+      then activates trailing stop. More risk of full losses but potentially larger winners.<br><br>
+      <strong>Difference:</strong>
+      <span class="green bold">
+        Trail Only is +233,698 (+30.6%)
+        better than BE + Trail
+      </span>
+    </p>
+  </div>
+
+  <div style="margin-top:40px; padding:20px; background:#0d0d0d; border:1px solid #333; border-radius:8px; color:#666; font-size:11px;">
+    <strong style="color:#ef5350;">DISCLAIMER:</strong> These results are from backtesting on historical data and represent simulated/hypothetical performance.
+    Past performance does not guarantee future results. Slippage, commissions, and fees are NOT included.
+    <br><br><em>Generated: 2026-02-27 14:00:08</em>
+  </div>
+</body>
+</html>

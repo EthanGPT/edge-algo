@@ -14,7 +14,7 @@ import {
 import { HIGH_IMPACT_RELEASES, EventImpact } from '@/types';
 import { cn } from '@/lib/utils';
 
-const API_URL = import.meta.env.VITE_R2_API_URL;
+const API_URL = import.meta.env.VITE_R2_API_URL || 'https://proptracker-api.ethhartwell.workers.dev';
 
 // FRED Release IDs mapped to our event keys
 const FRED_RELEASE_MAP: Record<number, string> = {
