@@ -352,26 +352,6 @@ export default function Backtest() {
           </div>
         </section>
 
-        {/* CTA */}
-        <section className="text-center">
-          <div className="bg-gradient-to-r from-[#c8f54a]/10 to-transparent border border-[#c8f54a]/30 rounded-lg p-12">
-            <h3 className="font-display text-2xl font-bold text-[#f5f5f5] mb-4">
-              Trade with the same edge
-            </h3>
-            <p className="font-mono text-[13px] text-[#888] mb-8 max-w-lg mx-auto">
-              Get the exact indicator that generated these results. Automatic
-              level plotting, alert signals, and tailored risk settings for MNQ,
-              MES, and MGC.
-            </p>
-            <Link
-              to="/purchase"
-              className="inline-block bg-[#c8f54a] text-[#0a0a0a] font-mono text-[11px] font-bold uppercase tracking-[0.12em] px-10 py-4 transition-opacity hover:opacity-90"
-            >
-              Get the Indicator →
-            </Link>
-          </div>
-        </section>
-
         {/* Disclaimer */}
         <p className="font-mono text-[9px] text-[#555] text-center mt-12 max-w-3xl mx-auto leading-relaxed">
           DISCLAIMER: These results are from backtesting on historical data and
