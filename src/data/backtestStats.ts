@@ -130,6 +130,44 @@ export const BACKTEST_HIGHLIGHTS = {
   contractAllocation: '4 MNQ + 4 MES + 2 MGC',
 } as const;
 
+// Performance breakdowns
+export const DAY_OF_WEEK_STATS = [
+  { day: 'Monday', trades: 3058, winRate: 60.1, pnl: 203645 },
+  { day: 'Tuesday', trades: 3220, winRate: 59.8, pnl: 213672 },
+  { day: 'Wednesday', trades: 3192, winRate: 60.8, pnl: 250553 },
+  { day: 'Thursday', trades: 3186, winRate: 60.4, pnl: 236399 },
+  { day: 'Friday', trades: 3095, winRate: 61.4, pnl: 303147 },
+];
+
+export const SESSION_STATS = [
+  { session: 'London', trades: 13264, winRate: 60.6, pnl: 907090 },
+  { session: 'NY', trades: 2487, winRate: 59.8, pnl: 300326 },
+];
+
+export const MONTH_STATS = [
+  { month: 'Jan', trades: 1495, winRate: 59.0, pnl: 84094 },
+  { month: 'Feb', trades: 1164, winRate: 58.5, pnl: 92324 },
+  { month: 'Mar', trades: 1395, winRate: 61.7, pnl: 130244 },
+  { month: 'Apr', trades: 1070, winRate: 59.1, pnl: 84970 },
+  { month: 'May', trades: 1364, winRate: 63.3, pnl: 120950 },
+  { month: 'Jun', trades: 1194, winRate: 59.0, pnl: 78988 },
+  { month: 'Jul', trades: 1487, winRate: 61.3, pnl: 99321 },
+  { month: 'Aug', trades: 1240, winRate: 60.2, pnl: 95672 },
+  { month: 'Sep', trades: 1468, winRate: 61.3, pnl: 112228 },
+  { month: 'Oct', trades: 1226, winRate: 59.9, pnl: 92592 },
+  { month: 'Nov', trades: 1435, winRate: 63.4, pnl: 144230 },
+  { month: 'Dec', trades: 1213, winRate: 57.7, pnl: 71803 },
+];
+
+export const LEVEL_STATS = [
+  { level: 'PDH', trades: 823, winRate: 58.4, pnl: 68082 },
+  { level: 'PDL', trades: 931, winRate: 57.7, pnl: 72565 },
+  { level: 'PMH', trades: 4055, winRate: 60.9, pnl: 312579 },
+  { level: 'PML', trades: 4072, winRate: 64.0, pnl: 406319 },
+  { level: 'LPH', trades: 2973, winRate: 57.5, pnl: 168561 },
+  { level: 'LPL', trades: 2897, winRate: 59.5, pnl: 179310 },
+];
+
 // Format helpers
 export function formatCurrency(value: number): string {
   if (Math.abs(value) >= 1000000) {

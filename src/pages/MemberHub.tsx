@@ -12,6 +12,10 @@ import {
   BACKTEST_HIGHLIGHTS,
   INSTRUMENT_STATS,
   BACKTEST_CONFIG,
+  DAY_OF_WEEK_STATS,
+  SESSION_STATS,
+  MONTH_STATS,
+  LEVEL_STATS,
 } from "@/data/backtestStats";
 
 export default function MemberHub() {
@@ -190,6 +194,120 @@ export default function MemberHub() {
         <p className="mt-4 text-center text-xs text-muted-foreground">
           Backtested results. Simulated performance. Past results do not guarantee future performance.
         </p>
+      </div>
+
+      {/* Performance Breakdowns */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Day of Week */}
+        <div className="rounded-lg border border-border bg-card p-6">
+          <h3 className="font-semibold text-foreground mb-4">Performance by Day</h3>
+          <div className="space-y-2">
+            {DAY_OF_WEEK_STATS.map((day) => {
+              const maxPnl = Math.max(...DAY_OF_WEEK_STATS.map(d => d.pnl));
+              const barWidth = (day.pnl / maxPnl) * 100;
+              return (
+                <div key={day.day} className="flex items-center gap-3">
+                  <span className="w-20 text-xs text-muted-foreground">{day.day.slice(0, 3)}</span>
+                  <div className="flex-1 h-6 bg-background/50 rounded overflow-hidden relative">
+                    <div
+                      className="h-full bg-accent/30 rounded"
+                      style={{ width: `${barWidth}%` }}
+                    />
+                    <span className="absolute inset-0 flex items-center px-2 text-xs font-medium">
+                      {day.winRate.toFixed(0)}% WR
+                    </span>
+                  </div>
+                  <span className="w-16 text-right text-xs font-medium text-accent">
+                    +${(day.pnl / 1000).toFixed(0)}K
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground text-center">
+            Friday best day: 61.4% WR, +$303K
+          </p>
+        </div>
+
+        {/* Session Comparison */}
+        <div className="rounded-lg border border-border bg-card p-6">
+          <h3 className="font-semibold text-foreground mb-4">Session Comparison</h3>
+          <div className="grid grid-cols-2 gap-4">
+            {SESSION_STATS.map((sess) => (
+              <div key={sess.session} className="bg-background/50 rounded-lg p-4 text-center">
+                <p className="text-lg font-bold text-foreground">{sess.session}</p>
+                <p className="text-2xl font-bold text-accent mt-2">
+                  +${(sess.pnl / 1000).toFixed(0)}K
+                </p>
+                <div className="flex justify-center gap-4 mt-2 text-xs text-muted-foreground">
+                  <span>{sess.winRate.toFixed(1)}% WR</span>
+                  <span>{sess.trades.toLocaleString()} trades</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground text-center">
+            London: 84% of trades, NY: 16% of trades
+          </p>
+        </div>
+
+        {/* Monthly Performance */}
+        <div className="rounded-lg border border-border bg-card p-6">
+          <h3 className="font-semibold text-foreground mb-4">Monthly Performance</h3>
+          <div className="grid grid-cols-6 gap-2">
+            {MONTH_STATS.map((month) => {
+              const maxPnl = Math.max(...MONTH_STATS.map(m => m.pnl));
+              const intensity = Math.round((month.pnl / maxPnl) * 100);
+              return (
+                <div
+                  key={month.month}
+                  className="text-center p-2 rounded"
+                  style={{
+                    backgroundColor: `rgba(200, 245, 74, ${intensity / 200})`,
+                  }}
+                >
+                  <p className="text-[10px] text-muted-foreground">{month.month}</p>
+                  <p className="text-xs font-bold">{month.winRate.toFixed(0)}%</p>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 flex justify-between text-xs text-muted-foreground">
+            <span>Best: Nov (63.4% WR)</span>
+            <span>Weakest: Dec (57.7% WR)</span>
+          </div>
+        </div>
+
+        {/* Level Performance */}
+        <div className="rounded-lg border border-border bg-card p-6">
+          <h3 className="font-semibold text-foreground mb-4">Performance by Level</h3>
+          <div className="space-y-2">
+            {LEVEL_STATS.map((lvl) => {
+              const maxPnl = Math.max(...LEVEL_STATS.map(l => l.pnl));
+              const barWidth = (lvl.pnl / maxPnl) * 100;
+              return (
+                <div key={lvl.level} className="flex items-center gap-3">
+                  <span className="w-12 text-xs font-mono text-accent">{lvl.level}</span>
+                  <div className="flex-1 h-6 bg-background/50 rounded overflow-hidden relative">
+                    <div
+                      className="h-full bg-accent/30 rounded"
+                      style={{ width: `${barWidth}%` }}
+                    />
+                    <span className="absolute inset-0 flex items-center px-2 text-xs font-medium">
+                      {lvl.winRate.toFixed(0)}% WR · {lvl.trades.toLocaleString()} trades
+                    </span>
+                  </div>
+                  <span className="w-16 text-right text-xs font-medium text-accent">
+                    +${(lvl.pnl / 1000).toFixed(0)}K
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground text-center">
+            PML (Previous Month Low) is the strongest level: 64% WR, +$406K
+          </p>
+        </div>
       </div>
 
       {/* Strategy Overview */}

@@ -5,7 +5,6 @@ import {
   LineChart,
   CalendarDays,
   Wallet,
-  BookOpen,
   DollarSign,
   BarChart3,
 } from "lucide-react";
@@ -15,7 +14,6 @@ import Trades from "./Trades";
 import Analytics from "./Analytics";
 import Calendar from "./Calendar";
 import Accounts from "./Accounts";
-import Setups from "./Setups";
 import Financials from "./Financials";
 import Reports from "./Reports";
 
@@ -24,7 +22,6 @@ const tabs = [
   { id: "analytics", label: "Analytics", icon: LineChart },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
   { id: "accounts", label: "Accounts", icon: Wallet },
-  { id: "setups", label: "Setups", icon: BookOpen },
   { id: "financials", label: "Financials", icon: DollarSign },
   { id: "reports", label: "Reports", icon: BarChart3 },
 ];
@@ -42,8 +39,6 @@ export default function TradeJournal() {
         return <Calendar />;
       case "accounts":
         return <Accounts />;
-      case "setups":
-        return <Setups />;
       case "financials":
         return <Financials />;
       case "reports":
