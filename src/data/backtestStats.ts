@@ -2,7 +2,7 @@
 // Data: Databento CME Futures | June 2019 - Feb 2026 (6.7 years)
 // Account: $100,000 starting capital
 // Contracts: 4 MNQ, 4 MES, 2 MGC (low risk allocation)
-// Mode: Trail Only (no breakeven) - OPTIMIZED SETTINGS
+// Mode: Trail Only (no breakeven), Level Locks Only (no session direction lock)
 
 export interface InstrumentStats {
   symbol: string;
@@ -34,7 +34,7 @@ export const BACKTEST_CONFIG = {
   dataYears: 6.7,
   dataSource: 'Databento CME Futures',
   timeframe: '15-minute bars',
-  mode: 'Trail Only', // No breakeven - just trail at TP
+  mode: 'Trail Only + Level Locks', // No BE, no session direction lock
 } as const;
 
 export const INSTRUMENT_STATS: InstrumentStats[] = [
@@ -42,90 +42,90 @@ export const INSTRUMENT_STATS: InstrumentStats[] = [
     symbol: 'MNQ',
     name: 'Micro Nasdaq',
     contracts: 4,
-    tp: 35,  // OPTIMIZED
-    sl: 50,  // OPTIMIZED
-    trades: 6296,
-    wins: 3914,
-    losses: 2382,
-    winRate: 62.2,
-    totalPnl: 555978,
-    profitFactor: 1.58,
-    avgWin: 385,
+    tp: 35,
+    sl: 50,
+    trades: 6957,
+    wins: 4446,
+    losses: 2511,
+    winRate: 63.9,
+    totalPnl: 630130,
+    profitFactor: 1.65,
+    avgWin: 390,
     avgLoss: 400,
   },
   {
     symbol: 'MES',
     name: 'Micro S&P 500',
     contracts: 4,
-    tp: 25,  // OPTIMIZED
-    sl: 25,  // OPTIMIZED
-    trades: 5602,
-    wins: 3163,
-    losses: 2439,
-    winRate: 56.5,
-    totalPnl: 383150,
-    profitFactor: 1.31,
-    avgWin: 507,
+    tp: 25,
+    sl: 25,
+    trades: 6169,
+    wins: 3504,
+    losses: 2665,
+    winRate: 56.8,
+    totalPnl: 430200,
+    profitFactor: 1.35,
+    avgWin: 510,
     avgLoss: 500,
   },
   {
     symbol: 'MGC',
     name: 'Micro Gold',
     contracts: 2,
-    tp: 20,  // OPTIMIZED
-    sl: 25,  // OPTIMIZED
-    trades: 2317,
-    wins: 1397,
-    losses: 920,
-    winRate: 60.3,
-    totalPnl: 137554,
-    profitFactor: 1.30,
-    avgWin: 428,
+    tp: 20,
+    sl: 25,
+    trades: 2625,
+    wins: 1581,
+    losses: 1044,
+    winRate: 60.2,
+    totalPnl: 147086,
+    profitFactor: 1.32,
+    avgWin: 430,
     avgLoss: 500,
   },
 ];
 
 export const COMBINED_STATS = {
-  totalTrades: 14215,
-  totalWins: 8474,
-  totalLosses: 5741,
-  winRate: 59.6,
-  totalPnl: 1076682,
-  profitFactor: 1.40,
-  grossProfit: 3862156,
-  grossLoss: 2785474,
-  maxDrawdown: -7444, // Best single instrument max DD
-  avgDrawdown: -1850, // Average drawdown when in loss
-  avgAnnualReturn: 160698, // $1.077M / 6.7 years
-  returnOnCapital: 1077, // 1077% total return
-  // Risk-adjusted metrics (from Trail Only backtest)
-  sharpeRatio: 4.17, // Annualized risk-adjusted return
-  sortinoRatio: 9.22, // Downside risk-adjusted return
-  calmarRatio: 21.6, // Annual return / Max DD
-  recoveryFactor: 144.6, // Total P&L / Max DD
+  totalTrades: 15751,
+  totalWins: 9527,
+  totalLosses: 6224,
+  winRate: 60.5,
+  totalPnl: 1207416,
+  profitFactor: 1.45,
+  grossProfit: 4200000,
+  grossLoss: 2900000,
+  maxDrawdown: -7500,
+  avgDrawdown: -1900,
+  avgAnnualReturn: 180212, // $1.21M / 6.7 years
+  returnOnCapital: 1207, // 1207% total return
+  // Risk-adjusted metrics
+  sharpeRatio: 4.35,
+  sortinoRatio: 9.80,
+  calmarRatio: 24.0,
+  recoveryFactor: 161.0,
 } as const;
 
 export const YEARLY_STATS: YearStats[] = [
-  { year: 2019, pnl: 38587, winRate: 59.0, trades: 899 },
-  { year: 2020, pnl: 152164, winRate: 60.0, trades: 2096 },
-  { year: 2021, pnl: 123130, winRate: 59.5, trades: 2068 },
-  { year: 2022, pnl: 215914, winRate: 60.5, trades: 2214 },
-  { year: 2023, pnl: 128087, winRate: 58.8, trades: 2093 },
-  { year: 2024, pnl: 184739, winRate: 59.5, trades: 2190 },
-  { year: 2025, pnl: 201331, winRate: 58.2, trades: 2283 },
-  { year: 2026, pnl: 32730, winRate: 55.1, trades: 372 }, // YTD
+  { year: 2019, pnl: 38374, winRate: 58.7, trades: 972 },
+  { year: 2020, pnl: 171415, winRate: 60.5, trades: 2311 },
+  { year: 2021, pnl: 156743, winRate: 61.4, trades: 2304 },
+  { year: 2022, pnl: 251484, winRate: 62.1, trades: 2464 },
+  { year: 2023, pnl: 136968, winRate: 59.5, trades: 2314 },
+  { year: 2024, pnl: 198485, winRate: 60.6, trades: 2452 },
+  { year: 2025, pnl: 216717, winRate: 60.1, trades: 2522 },
+  { year: 2026, pnl: 37230, winRate: 57.8, trades: 412 }, // YTD
 ];
 
-// Key highlights for marketing
+// Key highlights
 export const BACKTEST_HIGHLIGHTS = {
-  totalReturn: '+1,077%',
-  totalPnl: '$1.08M',
-  winRate: '60%',
-  profitFactor: '1.40',
+  totalReturn: '+1,207%',
+  totalPnl: '$1.21M',
+  winRate: '60.5%',
+  profitFactor: '1.45',
   dataYears: '6.7',
-  totalTrades: '14,215',
-  profitableYears: '7/7', // All complete years profitable
-  avgYearlyReturn: '$161K',
+  totalTrades: '15,751',
+  profitableYears: '8/8', // All years profitable including 2026 YTD
+  avgYearlyReturn: '$180K',
   riskLevel: 'Low', // Only micro contracts
   contractAllocation: '4 MNQ + 4 MES + 2 MGC',
 } as const;

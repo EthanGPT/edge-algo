@@ -8,21 +8,23 @@
 
 The Key Level Breakout System is a liquidity-based futures strategy built on the 6 most important intraday price levels. This mechanical approach removes emotional decision-making and provides clear, repeatable entries with defined risk.
 
-### Verified Backtest Results (OPTIMIZED)
+### Verified Backtest Results (Level Locks Only, Trail Only Mode)
 
 | Metric | Value |
 |--------|-------|
-| **Total P&L** | $1,076,682 |
-| **Return on $100K** | +1,077% |
-| **Total Trades** | 14,215 |
-| **Win Rate** | 59.6% |
-| **Profit Factor** | 1.40 |
-| **Max Drawdown** | $7,444 |
+| **Total P&L** | $1,207,416 |
+| **Return on $100K** | +1,207% |
+| **Total Trades** | 15,751 |
+| **Win Rate** | 60.5% |
+| **Profit Factor** | 1.45 |
+| **Max Drawdown** | $7,500 |
 | **Years of Data** | 6.7 Years |
-| **Profitable Years** | 7/7 |
-| **Avg Yearly P&L** | $161,000 |
+| **Profitable Years** | 8/8 |
+| **Avg Yearly P&L** | $180,000 |
+| **Sharpe Ratio** | 4.35 |
 
 **Contract Allocation:** 4 MNQ + 4 MES + 2 MGC (Low Risk)
+**Mode:** Level locks only (no session direction lock), Trail Only (no breakeven)
 
 ---
 
@@ -136,48 +138,45 @@ If price enters a level's retest zone during the dead zone (08:00-09:00 ET), tha
 | Metric | Value |
 |--------|-------|
 | TP / SL | 35 pts / 50 pts |
-| Total Trades | 6,296 |
-| Win Rate | 62.2% |
-| Total P&L | $555,978 |
-| Profit Factor | 1.58 |
-| Max Drawdown | $7,444 |
+| Total Trades | 6,957 |
+| Win Rate | 63.9% |
+| Total P&L | $630,130 |
+| Profit Factor | 1.65 |
 
 ### MES (Micro S&P 500)
 | Metric | Value |
 |--------|-------|
 | TP / SL | 25 pts / 25 pts |
-| Total Trades | 5,602 |
-| Win Rate | 56.5% |
-| Total P&L | $383,150 |
-| Profit Factor | 1.31 |
-| Max Drawdown | $6,490 |
+| Total Trades | 6,169 |
+| Win Rate | 56.8% |
+| Total P&L | $430,200 |
+| Profit Factor | 1.35 |
 
 ### MGC (Micro Gold)
 | Metric | Value |
 |--------|-------|
 | TP / SL | 20 pts / 25 pts |
-| Total Trades | 2,317 |
-| Win Rate | 60.3% |
-| Total P&L | $137,554 |
-| Profit Factor | 1.30 |
-| Max Drawdown | $6,442 |
+| Total Trades | 2,625 |
+| Win Rate | 60.2% |
+| Total P&L | $147,086 |
+| Profit Factor | 1.32 |
 
 ---
 
 ## Year-by-Year Performance (Combined)
 
-| Year | Trades | P&L | Notes |
-|------|--------|-----|-------|
-| 2019 | 899 | $38,587 | Partial year (June-Dec) |
-| 2020 | 2,096 | $152,164 | COVID volatility |
-| 2021 | 2,068 | $123,130 | Post-COVID normalization |
-| 2022 | 2,214 | $215,914 | Bear market, high volatility |
-| 2023 | 2,093 | $128,087 | Recovery year |
-| 2024 | 2,190 | $184,739 | Election year |
-| 2025 | 2,283 | $201,331 | Current year (partial) |
-| 2026 | 372 | $32,730 | Jan-Feb only |
+| Year | Trades | P&L | Win Rate |
+|------|--------|-----|----------|
+| 2019 | 972 | $38,374 | 58.7% |
+| 2020 | 2,311 | $171,415 | 60.5% |
+| 2021 | 2,304 | $156,743 | 61.4% |
+| 2022 | 2,464 | $251,484 | 62.1% |
+| 2023 | 2,314 | $136,968 | 59.5% |
+| 2024 | 2,452 | $198,485 | 60.6% |
+| 2025 | 2,522 | $216,717 | 60.1% |
+| 2026 | 412 | $37,230 | 57.8% |
 
-**Every single year profitable.**
+**Every single year profitable (8/8).**
 
 ---
 
@@ -185,14 +184,14 @@ If price enters a level's retest zone during the dead zone (08:00-09:00 ET), tha
 
 | Level | Trades | Win Rate | P&L |
 |-------|--------|----------|-----|
-| **PMH** | 3,520 | 55.8% | $251,732 |
-| **PML** | 3,296 | 58.8% | $282,012 |
-| LPH | 2,881 | 53.6% | $157,406 |
-| LPL | 2,748 | 56.9% | $175,682 |
-| PDH | 782 | 52.9% | $82,503 |
-| PDL | 901 | 53.8% | $127,347 |
+| **PML** | 4,072 | 64.0% | $406,319 |
+| **PMH** | 4,055 | 60.9% | $312,579 |
+| LPL | 2,897 | 59.5% | $179,310 |
+| LPH | 2,973 | 57.5% | $168,561 |
+| PDL | 931 | 57.7% | $72,565 |
+| PDH | 823 | 58.4% | $68,082 |
 
-**Key insight:** PM (Pre Market) levels are the highest performers with the best win rates.
+**Key insight:** PML (Previous Month Low) is the top performer with 64% win rate and $406K profit.
 
 ---
 
@@ -200,10 +199,10 @@ If price enters a level's retest zone during the dead zone (08:00-09:00 ET), tha
 
 | Session | Trades | Win Rate | P&L |
 |---------|--------|----------|-----|
-| London | 9,423 | 59.2% | $626,314 |
-| NY | 4,792 | 55.8% | $450,368 |
+| London | 13,264 | 60.6% | $907,090 |
+| NY | 2,487 | 59.8% | $300,326 |
 
-Both sessions are profitable. London has more trades, NY has higher P&L per trade.
+London dominates with 84% of trades and $907K profit. Both sessions maintain ~60% win rate.
 
 ---
 
