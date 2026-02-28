@@ -3,9 +3,7 @@ import { cn } from "@/lib/utils";
 import { useMembership } from "@/context/MembershipContext";
 
 const navLinks = [
-  { name: "SYSTEM", href: "/#system" },
-  { name: "PRICING", href: "/purchase" },
-  { name: "DISCORD", href: "/discord" },
+  { name: "RESULTS", href: "/backtest" },
 ];
 
 interface PublicNavbarProps {
@@ -57,7 +55,7 @@ export function PublicNavbar({ variant = "dark" }: PublicNavbarProps) {
 
           {/* CTA Button */}
           <Link
-            to={isMember ? "/dashboard" : "/purchase"}
+            to="/dashboard"
             className={cn(
               "font-mono text-[11px] font-medium uppercase tracking-[0.12em] px-6 py-3 transition-colors",
               isLight
@@ -65,13 +63,13 @@ export function PublicNavbar({ variant = "dark" }: PublicNavbarProps) {
                 : "bg-[#c8f54a] text-[#0a0a0a]"
             )}
           >
-            {isMember ? "MEMBER HUB" : "MEMBER HUB"}
+            MEMBER HUB
           </Link>
         </div>
 
         {/* Mobile CTA */}
         <Link
-          to={isMember ? "/dashboard" : "/purchase"}
+          to="/dashboard"
           className={cn(
             "md:hidden font-mono text-[11px] font-medium uppercase tracking-[0.12em] px-4 py-2 transition-colors",
             isLight
@@ -79,7 +77,7 @@ export function PublicNavbar({ variant = "dark" }: PublicNavbarProps) {
               : "bg-[#c8f54a] text-[#0a0a0a]"
           )}
         >
-          {isMember ? "HUB" : "JOIN"}
+          HUB
         </Link>
       </div>
 

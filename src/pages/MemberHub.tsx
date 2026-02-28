@@ -1,104 +1,75 @@
 import { Link } from "react-router-dom";
 import {
-  TrendingUp,
   BarChart3,
-  Target,
-  Clock,
   CheckCircle,
   ArrowRight,
   FileText,
-  MessageCircle,
-  Video,
-  Lock,
+  Calendar,
+  LineChart,
   ExternalLink,
 } from "lucide-react";
-import { useMembership } from "@/context/MembershipContext";
 import {
   BACKTEST_HIGHLIGHTS,
-  COMBINED_STATS,
-  YEARLY_STATS,
   INSTRUMENT_STATS,
   BACKTEST_CONFIG,
 } from "@/data/backtestStats";
 
 export default function MemberHub() {
-  const { tier } = useMembership();
-  const hasEdgeAccess = tier === 'edge' || tier === 'mentorship';
-  const hasMentorshipAccess = tier === 'mentorship';
-
   return (
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="page-title">Welcome to Edge</h1>
-        <p className="page-subtitle">Your trading mentorship member hub</p>
+        <h1 className="page-title">Results Dashboard</h1>
+        <p className="page-subtitle">Track performance, log trades, build your track record</p>
       </div>
 
       {/* Quick Access Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Trade Journal - Main CTA */}
         <Link
-          to={hasEdgeAccess ? "/trade-journal" : "/purchase"}
-          className={`stat-card group relative overflow-hidden transition-all hover:border-accent ${
-            hasEdgeAccess ? "" : "opacity-75"
-          }`}
+          to="/trade-journal"
+          className="stat-card group relative overflow-hidden transition-all hover:border-accent"
         >
-          {!hasEdgeAccess && (
-            <div className="absolute top-3 right-3">
-              <Lock className="h-4 w-4 text-muted-foreground" />
-            </div>
-          )}
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/20">
             <BarChart3 className="h-5 w-5 text-accent" />
           </div>
           <h3 className="mt-3 font-semibold text-foreground">Trade Journal</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            {hasEdgeAccess ? "Log trades, track P&L, analyze performance" : "Upgrade to access"}
+            Log trades, track P&L, analyze performance
           </p>
           <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-accent group-hover:underline">
-            {hasEdgeAccess ? "Open Journal" : "Unlock"} <ArrowRight className="h-3 w-3" />
+            Open Journal <ArrowRight className="h-3 w-3" />
           </span>
         </Link>
 
-        {/* Discord */}
+        {/* Analytics */}
         <Link
-          to="/discord"
+          to="/analytics"
           className="stat-card group transition-all hover:border-accent"
         >
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/20">
-            <MessageCircle className="h-5 w-5 text-accent" />
+            <LineChart className="h-5 w-5 text-accent" />
           </div>
-          <h3 className="mt-3 font-semibold text-foreground">Discord</h3>
+          <h3 className="mt-3 font-semibold text-foreground">Analytics</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Community, trade reviews, live analysis
+            Performance charts, metrics, and insights
           </p>
           <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-accent group-hover:underline">
-            Join Discord <ArrowRight className="h-3 w-3" />
+            View Analytics <ArrowRight className="h-3 w-3" />
           </span>
         </Link>
 
         {/* Course - HIGHLIGHTED */}
         <Link
-          to={hasEdgeAccess ? "/course" : "/purchase"}
-          className={`stat-card group relative overflow-hidden transition-all ${
-            hasEdgeAccess
-              ? "border-2 border-gold ring-2 ring-gold/20 hover:ring-gold/40"
-              : "opacity-75"
-          }`}
+          to="/course"
+          className="stat-card group relative overflow-hidden transition-all border-2 border-gold ring-2 ring-gold/20 hover:ring-gold/40"
         >
           {/* Important Badge */}
-          {hasEdgeAccess && (
-            <div className="absolute top-0 right-0">
-              <div className="bg-gold text-background text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
-                MUST READ
-              </div>
+          <div className="absolute top-0 right-0">
+            <div className="bg-gold text-background text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
+              STRATEGY
             </div>
-          )}
-          {!hasEdgeAccess && (
-            <div className="absolute top-3 right-3">
-              <Lock className="h-4 w-4 text-muted-foreground" />
-            </div>
-          )}
+          </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gold/20">
             <FileText className="h-5 w-5 text-gold" />
           </div>
@@ -106,36 +77,25 @@ export default function MemberHub() {
           <p className="mt-1 text-xs text-muted-foreground">
             The complete system with optimized parameters
           </p>
-          <span className={`mt-3 inline-flex items-center gap-1 text-xs font-medium group-hover:underline ${
-            hasEdgeAccess ? "text-gold" : "text-muted-foreground"
-          }`}>
-            {hasEdgeAccess ? "Read the Strategy" : "Edge members only"} <ArrowRight className="h-3 w-3" />
+          <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-gold group-hover:underline">
+            Read the Strategy <ArrowRight className="h-3 w-3" />
           </span>
         </Link>
 
-        {/* Book 1-on-1 */}
+        {/* P&L Calendar */}
         <Link
-          to={hasMentorshipAccess ? "/book" : "/purchase"}
-          className={`stat-card group relative transition-all hover:border-gold ${
-            hasMentorshipAccess ? "" : "opacity-75"
-          }`}
+          to="/calendar"
+          className="stat-card group relative transition-all hover:border-accent"
         >
-          {!hasMentorshipAccess && (
-            <div className="absolute top-3 right-3">
-              <Lock className="h-4 w-4 text-muted-foreground" />
-            </div>
-          )}
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gold/20">
-            <Video className="h-5 w-5 text-gold" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/20">
+            <Calendar className="h-5 w-5 text-accent" />
           </div>
-          <h3 className="mt-3 font-semibold text-foreground">Book 1-on-1</h3>
+          <h3 className="mt-3 font-semibold text-foreground">P&L Calendar</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            {hasMentorshipAccess ? "Schedule your weekly session" : "Mentorship members only"}
+            Daily and weekly performance at a glance
           </p>
-          <span className={`mt-3 inline-flex items-center gap-1 text-xs font-medium group-hover:underline ${
-            hasMentorshipAccess ? "text-gold" : "text-muted-foreground"
-          }`}>
-            {hasMentorshipAccess ? "Book Session" : "Apply"} <ArrowRight className="h-3 w-3" />
+          <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-accent group-hover:underline">
+            View Calendar <ArrowRight className="h-3 w-3" />
           </span>
         </Link>
       </div>
@@ -266,51 +226,42 @@ export default function MemberHub() {
           </div>
         </div>
 
-        {/* What's Included */}
+        {/* Quick Links */}
         <div className="rounded-lg border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground">Your Membership Includes</h3>
+          <h3 className="font-semibold text-foreground">Quick Links</h3>
 
           <div className="mt-4 space-y-3">
-            <div className="flex items-center gap-3">
-              <CheckCircle className={`h-4 w-4 ${hasEdgeAccess ? 'text-accent' : 'text-muted-foreground'}`} />
-              <span className={`text-sm ${hasEdgeAccess ? 'text-foreground' : 'text-muted-foreground'}`}>
-                Key Level Breakout Indicator (TradingView)
+            <Link to="/backtest" className="flex items-center gap-3 group">
+              <CheckCircle className="h-4 w-4 text-accent" />
+              <span className="text-sm text-foreground group-hover:text-accent transition-colors">
+                Full Backtest Results
               </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <CheckCircle className={`h-4 w-4 ${hasEdgeAccess ? 'text-gold' : 'text-muted-foreground'}`} />
-              <span className={`text-sm ${hasEdgeAccess ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                KLBS Strategy Guide (Web + PDF)
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <CheckCircle className={`h-4 w-4 ${hasEdgeAccess ? 'text-accent' : 'text-muted-foreground'}`} />
-              <span className={`text-sm ${hasEdgeAccess ? 'text-foreground' : 'text-muted-foreground'}`}>
-                Trade Journal & Analytics
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <CheckCircle className={`h-4 w-4 ${hasEdgeAccess ? 'text-accent' : 'text-muted-foreground'}`} />
-              <span className={`text-sm ${hasEdgeAccess ? 'text-foreground' : 'text-muted-foreground'}`}>
-                Paid Discord (live executions, reviews)
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <CheckCircle className={`h-4 w-4 ${hasMentorshipAccess ? 'text-gold' : 'text-muted-foreground'}`} />
-              <span className={`text-sm ${hasMentorshipAccess ? 'text-foreground' : 'text-muted-foreground'}`}>
-                Weekly 1-on-1 Sessions (Mentorship)
-              </span>
-            </div>
-          </div>
-
-          {!hasEdgeAccess && (
-            <Link
-              to="/purchase"
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-accent py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent/90"
-            >
-              Upgrade to Edge <ArrowRight className="h-4 w-4" />
             </Link>
-          )}
+            <Link to="/course" className="flex items-center gap-3 group">
+              <CheckCircle className="h-4 w-4 text-gold" />
+              <span className="text-sm text-foreground font-medium group-hover:text-gold transition-colors">
+                KLBS Strategy Guide
+              </span>
+            </Link>
+            <Link to="/analytics" className="flex items-center gap-3 group">
+              <CheckCircle className="h-4 w-4 text-accent" />
+              <span className="text-sm text-foreground group-hover:text-accent transition-colors">
+                Performance Analytics
+              </span>
+            </Link>
+            <Link to="/accounts" className="flex items-center gap-3 group">
+              <CheckCircle className="h-4 w-4 text-accent" />
+              <span className="text-sm text-foreground group-hover:text-accent transition-colors">
+                Prop Firm Accounts
+              </span>
+            </Link>
+            <Link to="/economic-calendar" className="flex items-center gap-3 group">
+              <CheckCircle className="h-4 w-4 text-accent" />
+              <span className="text-sm text-foreground group-hover:text-accent transition-colors">
+                Economic Calendar
+              </span>
+            </Link>
+          </div>
         </div>
       </div>
 

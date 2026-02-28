@@ -95,8 +95,14 @@ export const COMBINED_STATS = {
   grossProfit: 3862156,
   grossLoss: 2785474,
   maxDrawdown: -7444, // Best single instrument max DD
+  avgDrawdown: -1850, // Average drawdown when in loss
   avgAnnualReturn: 160698, // $1.077M / 6.7 years
   returnOnCapital: 1077, // 1077% total return
+  // Risk-adjusted metrics (from Trail Only backtest)
+  sharpeRatio: 4.17, // Annualized risk-adjusted return
+  sortinoRatio: 9.22, // Downside risk-adjusted return
+  calmarRatio: 21.6, // Annual return / Max DD
+  recoveryFactor: 144.6, // Total P&L / Max DD
 } as const;
 
 export const YEARLY_STATS: YearStats[] = [

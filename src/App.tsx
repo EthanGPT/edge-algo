@@ -10,8 +10,6 @@ import { Paywall } from "@/components/Paywall";
 
 // Public pages
 import Landing from "./pages/Landing";
-import Courses from "./pages/Courses";
-import Purchase from "./pages/Purchase";
 import Backtest from "./pages/Backtest";
 import EdgeCourse from "./pages/EdgeCourse";
 
@@ -25,11 +23,8 @@ import Reports from "./pages/Reports";
 import Calendar from "./pages/Calendar";
 import EconomicCalendar from "./pages/EconomicCalendar";
 import Trades from "./pages/Trades";
-import Setups from "./pages/Setups";
 import Analytics from "./pages/Analytics";
 import Journal from "./pages/Journal";
-import BookSession from "./pages/BookSession";
-import Discord from "./pages/Discord";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,8 +40,6 @@ const App = () => (
             <Routes>
               {/* Public routes - no sidebar */}
               <Route path="/" element={<Landing />} />
-              <Route path="/courses" element={<Courses />} />
-              <Route path="/purchase" element={<Purchase />} />
               <Route path="/backtest" element={<Backtest />} />
 
               {/* Member routes - with sidebar */}
@@ -109,33 +102,11 @@ const App = () => (
                 }
               />
               <Route
-                path="/discord"
-                element={
-                  <AppLayout>
-                    <Discord />
-                  </AppLayout>
-                }
-              />
-              <Route
                 path="/course"
                 element={
                   <AppLayout>
                     <Paywall title="Strategy Guide is a Member Benefit" description="Get the complete KLBS strategy with optimized parameters and verified backtest results.">
                       <EdgeCourse />
-                    </Paywall>
-                  </AppLayout>
-                }
-              />
-              <Route
-                path="/book"
-                element={
-                  <AppLayout>
-                    <Paywall
-                      requiredTier="mentorship"
-                      title="1-on-1 Sessions are a Mentorship Benefit"
-                      description="Get direct access with weekly 30-minute sessions to review your trades and refine your execution."
-                    >
-                      <BookSession />
                     </Paywall>
                   </AppLayout>
                 }
@@ -155,16 +126,6 @@ const App = () => (
                 element={
                   <AppLayout>
                     <PropFirms />
-                  </AppLayout>
-                }
-              />
-              <Route
-                path="/setups"
-                element={
-                  <AppLayout>
-                    <Paywall title="Trade Setups is a Member Benefit" description="Define and track your trading setups to improve consistency.">
-                      <Setups />
-                    </Paywall>
                   </AppLayout>
                 }
               />

@@ -27,14 +27,24 @@ export default function Backtest() {
               KLBS Backtest Results
             </h1>
           </div>
-          <a
-            href="/klbs_backtest_report.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 border border-[#c8f54a]/50 text-[#c8f54a] font-mono text-[10px] uppercase tracking-wider px-4 py-2 hover:bg-[#c8f54a]/10 transition-colors"
-          >
-            Full Interactive Report <ExternalLink className="h-3 w-3" />
-          </a>
+          <div className="flex items-center gap-3">
+            <a
+              href="/klbs_oos_report.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 border border-[#888]/50 text-[#888] font-mono text-[10px] uppercase tracking-wider px-4 py-2 hover:bg-[#888]/10 transition-colors"
+            >
+              Stability Analysis <ExternalLink className="h-3 w-3" />
+            </a>
+            <a
+              href="/klbs_backtest_report.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 border border-[#c8f54a]/50 text-[#c8f54a] font-mono text-[10px] uppercase tracking-wider px-4 py-2 hover:bg-[#c8f54a]/10 transition-colors"
+            >
+              Full Interactive Report <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
         </div>
       </header>
 
@@ -253,6 +263,59 @@ export default function Backtest() {
             <StatCard label="Gross Loss" value={`$${(COMBINED_STATS.grossLoss / 1000).toFixed(0)}K`} color="red" />
             <StatCard label="Max Drawdown" value={`$${Math.abs(COMBINED_STATS.maxDrawdown).toLocaleString()}`} color="red" />
             <StatCard label="Avg Annual Return" value={`$${(COMBINED_STATS.avgAnnualReturn / 1000).toFixed(0)}K`} color="green" />
+          </div>
+        </section>
+
+        {/* Risk-Adjusted Metrics */}
+        <section className="mb-16">
+          <h3 className="font-mono text-[11px] uppercase tracking-[0.15em] text-[#c8f54a] mb-6">
+            Risk-Adjusted Returns
+          </h3>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-[#0d0d0d] border border-[#1f1f1f] rounded-lg p-6 text-center">
+              <p className="font-display text-3xl font-bold text-[#c8f54a]">{COMBINED_STATS.sharpeRatio.toFixed(2)}</p>
+              <p className="font-mono text-[10px] text-[#666] uppercase mt-2">Sharpe Ratio</p>
+              <p className="font-mono text-[9px] text-[#444] mt-1">&gt;1 good, &gt;2 excellent</p>
+            </div>
+            <div className="bg-[#0d0d0d] border border-[#1f1f1f] rounded-lg p-6 text-center">
+              <p className="font-display text-3xl font-bold text-[#c8f54a]">{COMBINED_STATS.sortinoRatio.toFixed(2)}</p>
+              <p className="font-mono text-[10px] text-[#666] uppercase mt-2">Sortino Ratio</p>
+              <p className="font-mono text-[9px] text-[#444] mt-1">Downside risk-adjusted</p>
+            </div>
+            <div className="bg-[#0d0d0d] border border-[#1f1f1f] rounded-lg p-6 text-center">
+              <p className="font-display text-3xl font-bold text-[#c8f54a]">{COMBINED_STATS.calmarRatio.toFixed(1)}</p>
+              <p className="font-mono text-[10px] text-[#666] uppercase mt-2">Calmar Ratio</p>
+              <p className="font-mono text-[9px] text-[#444] mt-1">Return / Max DD</p>
+            </div>
+            <div className="bg-[#0d0d0d] border border-[#1f1f1f] rounded-lg p-6 text-center">
+              <p className="font-display text-3xl font-bold text-[#c8f54a]">{COMBINED_STATS.recoveryFactor.toFixed(1)}x</p>
+              <p className="font-mono text-[10px] text-[#666] uppercase mt-2">Recovery Factor</p>
+              <p className="font-mono text-[9px] text-[#444] mt-1">Total P&L / Max DD</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Scaling Note */}
+        <section className="mb-16">
+          <div className="bg-gradient-to-br from-[#0d0d0d] to-[#1a1a0d] border-2 border-[#c8f54a]/20 rounded-lg p-8">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="bg-[#c8f54a] text-[#080808] font-mono text-[10px] font-bold uppercase tracking-wider px-3 py-1">
+                Important
+              </span>
+            </div>
+            <h3 className="font-display text-xl font-bold text-[#f5f5f5] mb-3">
+              Fixed Position Sizing — No Compounding
+            </h3>
+            <p className="font-mono text-[12px] text-[#888] leading-relaxed mb-4">
+              This backtest uses <span className="text-[#f5f5f5] font-bold">fixed contract sizes (4 MNQ, 4 MES, 2 MGC)</span> for
+              the entire 6.7 year period with zero scaling. In reality, as your account grows from $100K to $200K+, you would
+              naturally increase position sizes — compounding your returns significantly.
+            </p>
+            <p className="font-mono text-[12px] text-[#888] leading-relaxed">
+              <span className="text-[#c8f54a] font-bold">The upside potential is substantially higher</span> with smart scaling,
+              position sizing optimization, and compounding. These results represent the conservative baseline — the floor, not the ceiling.
+            </p>
           </div>
         </section>
 

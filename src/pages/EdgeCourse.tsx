@@ -34,8 +34,7 @@ export default function EdgeCourse() {
             </Link>
             <a
               href="/Edge_Course.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
+              download="KLBS_Strategy_Guide.pdf"
               className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 transition-colors"
             >
               <Download className="h-4 w-4" />
@@ -447,8 +446,7 @@ export default function EdgeCourse() {
         <div className="flex justify-center gap-4">
           <a
             href="/Edge_Course.pdf"
-            target="_blank"
-            rel="noopener noreferrer"
+            download="KLBS_Strategy_Guide.pdf"
             className="flex items-center gap-2 rounded-lg bg-accent px-6 py-3 font-semibold text-white hover:bg-accent/90 transition-colors"
           >
             <Download className="h-4 w-4" />
