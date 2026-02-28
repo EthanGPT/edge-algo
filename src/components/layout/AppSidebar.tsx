@@ -8,8 +8,6 @@ import {
   AlertCircle,
   Globe,
   Lock,
-  MessageCircle,
-  Video,
   PenLine,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -31,14 +29,8 @@ import { cn } from "@/lib/utils";
 
 // Member Hub - always visible
 const hubNav = [
-  { title: "Member Hub", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Results Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Trade Journal", url: "/trade-journal", icon: PenLine, requiresEdge: true },
-];
-
-// Community section
-const communityNav = [
-  { title: "Discord", url: "/discord", icon: MessageCircle },
-  { title: "Book Session", url: "/book", icon: Video, requiresMentorship: true },
 ];
 
 // Tools - requires Edge
@@ -130,25 +122,6 @@ export function AppSidebar() {
                   item={item}
                   isActive={location.pathname === item.url || (item.url === '/trade-journal' && location.pathname.startsWith('/trade-journal'))}
                   showLock={item.requiresEdge && !hasEdgeAccess}
-                />
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* Community section */}
-        <SidebarGroup>
-          <SidebarGroupLabel className="px-3 text-xs font-medium uppercase tracking-wider text-sidebar-muted">
-            Community
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5">
-              {communityNav.map((item) => (
-                <NavItem
-                  key={item.title}
-                  item={item}
-                  isActive={location.pathname === item.url}
-                  showLock={item.requiresMentorship && !hasMentorshipAccess}
                 />
               ))}
             </SidebarMenu>

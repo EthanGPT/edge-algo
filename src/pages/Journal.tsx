@@ -123,8 +123,8 @@ export default function Journal() {
       {/* Info Banner */}
       <div className="mb-6 rounded-lg border border-border bg-card p-4">
         <p className="text-sm text-muted-foreground">
-          Your journal is visible to your mentor ahead of 1-on-1 sessions. Make sure
-          to log your trades before booking a call.
+          Track your daily trading notes, psychology, and lessons learned. Use this
+          alongside your trade log to build your track record.
         </p>
       </div>
 

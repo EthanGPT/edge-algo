@@ -43,22 +43,16 @@ export function Footer() {
               HOME
             </Link>
             <Link
-              to="/courses"
+              to="/backtest"
               className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#888] transition-colors hover:text-[#f5f5f5]"
             >
-              SYSTEM
+              RESULTS
             </Link>
             <Link
-              to="/purchase"
+              to="/dashboard"
               className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#888] transition-colors hover:text-[#f5f5f5]"
             >
-              PRICING
-            </Link>
-            <Link
-              to="/discord"
-              className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#888] transition-colors hover:text-[#f5f5f5]"
-            >
-              DISCORD
+              DASHBOARD
             </Link>
           </div>
         </div>
