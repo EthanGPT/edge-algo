@@ -189,7 +189,7 @@ export default function Backtest() {
                   </div>
                   <div className="text-right">
                     <span className="font-display text-3xl font-bold text-[#c8f54a]">
-                      +${(inst.totalPnl / 1000).toFixed(0)}K
+                      +${(inst.netPnl / 1000).toFixed(0)}K
                     </span>
                   </div>
                 </div>
@@ -259,8 +259,8 @@ export default function Backtest() {
             <StatCard label="Total Losses" value={COMBINED_STATS.totalLosses.toLocaleString()} color="red" />
             <StatCard label="Win Rate" value={`${COMBINED_STATS.winRate}%`} color="green" />
             <StatCard label="Profit Factor" value={COMBINED_STATS.profitFactor.toFixed(2)} />
-            <StatCard label="Gross Profit" value={`$${(COMBINED_STATS.grossProfit / 1000).toFixed(0)}K`} color="green" />
-            <StatCard label="Gross Loss" value={`$${(COMBINED_STATS.grossLoss / 1000).toFixed(0)}K`} color="red" />
+            <StatCard label="Gross P&L" value={`$${(COMBINED_STATS.grossPnl / 1000).toFixed(0)}K`} color="green" />
+            <StatCard label="Total Fees" value={`$${(COMBINED_STATS.totalFees / 1000).toFixed(0)}K`} color="red" />
             <StatCard label="Max Drawdown" value={`$${Math.abs(COMBINED_STATS.maxDrawdown).toLocaleString()}`} color="red" />
             <StatCard label="Avg Annual Return" value={`$${(COMBINED_STATS.avgAnnualReturn / 1000).toFixed(0)}K`} color="green" />
           </div>
@@ -356,9 +356,9 @@ export default function Backtest() {
         <p className="font-mono text-[9px] text-[#555] text-center mt-12 max-w-3xl mx-auto leading-relaxed">
           DISCLAIMER: These results are from backtesting on historical data and
           represent simulated/hypothetical performance. Past performance does not
-          guarantee future results. Slippage, commissions, and fees are NOT
-          included in these calculations. Real-world execution may differ
-          significantly from simulated results. Market conditions change and past
+          guarantee future results. Commissions and fees (~$1.50/contract round-trip)
+          ARE included in these calculations. Slippage is not included. Real-world
+          execution may differ significantly from simulated results. Market conditions change and past
           patterns may not repeat. This data is for educational purposes only and
           should not be considered financial advice. Trading futures involves
           substantial risk of loss and is not suitable for all investors.

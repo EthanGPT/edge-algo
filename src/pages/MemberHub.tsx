@@ -178,7 +178,7 @@ export default function MemberHub() {
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-foreground">{inst.symbol}</span>
                   <span className="text-sm font-medium text-accent">
-                    +${(inst.totalPnl / 1000).toFixed(0)}K
+                    +${(inst.netPnl / 1000).toFixed(0)}K
                   </span>
                 </div>
                 <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">

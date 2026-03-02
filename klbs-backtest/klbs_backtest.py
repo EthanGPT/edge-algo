@@ -12,9 +12,16 @@ Strategy Rules:
   - Dead zone 08:00-09:30 ET: no signals, retest disarms level
   - Arm: previous candle fully through level (during session)
   - Retest zone: ±5pts MNQ/MES, ±3pts MGC
-  - TP/SL: 40pts MNQ, 20pts MES/MGC
+  - TP/SL: Optimized per instrument (MNQ 35/50, MES 25/25, MGC 20/25)
+  - Trail: Activates at TP level, follows by trail distance
   - One signal per level per day (level locked after firing)
-  - NO session direction lock (can fire both long and short in same session)
+  - Fees: Configurable (INCLUDE_FEES toggle, ~$1.50/contract round-trip)
+
+Usage:
+  python klbs_backtest.py           # Run with fees (default)
+  python klbs_backtest.py --no-fees # Run without fees
+  python klbs_backtest.py --optimize # Full parameter optimization
+  python klbs_backtest.py --oos     # Out-of-sample forward test
 """
 
 import warnings
@@ -67,7 +74,30 @@ INSTRUMENTS = {
 
 ET = pytz.timezone('America/New_York')
 DEBUG = False
-USE_BREAKEVEN = False  # Disabled: Trail Only mode performs +30% better than BE+Trail
+
+# ── Fees & Commissions ───────────────────────────────────────────────────────
+# Standard CME Micro futures costs (per contract, round-trip)
+INCLUDE_FEES = True  # Toggle to include/exclude fees in P&L
+FEES = {
+    'MNQ': {
+        'commission': 0.52,     # NinjaTrader/AMP typical rate per side
+        'exchange': 0.22,       # CME exchange fee per side
+        'nfa': 0.01,            # NFA regulatory fee per side
+        'round_trip': 1.50,     # Total per contract (both sides)
+    },
+    'MES': {
+        'commission': 0.52,
+        'exchange': 0.22,
+        'nfa': 0.01,
+        'round_trip': 1.50,
+    },
+    'MGC': {
+        'commission': 0.52,
+        'exchange': 0.22,
+        'nfa': 0.01,
+        'round_trip': 1.50,
+    },
+}
 
 # Output directories
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -115,10 +145,10 @@ def load_data(filepath):
     return df
 
 
-def run_backtest(symbol, cfg, use_breakeven=True):
-    mode_str = "BE+Trail" if use_breakeven else "Trail Only"
+def run_backtest(symbol, cfg, include_fees=INCLUDE_FEES):
+    fees_str = "with fees" if include_fees else "no fees"
     print(f"\n{'='*60}")
-    print(f"  {symbol} — {cfg['name']} [{mode_str}]")
+    print(f"  {symbol} — {cfg['name']} [Trail Mode, {fees_str}]")
     print(f"{'='*60}")
 
     filepath = os.path.join(BASE_DIR, cfg['file'])
@@ -334,17 +364,16 @@ def run_backtest(symbol, cfg, use_breakeven=True):
     trades_df = pd.DataFrame(trades)
     print(f"\n  Found {len(trades_df)} signals. Simulating outcomes...")
 
-    # ── Trade simulation with breakeven + trailing stop ───────────────────────
+    # ── Trade simulation with trailing stop ────────────────────────────────────
     # Rules:
     # 1. Entry at level price (limit order)
     # 2. Initial SL = entry ± sl_pts
-    # 3. At 50% of TP (halfway): move SL to breakeven (entry price)
-    # 4. At 100% of TP: switch to trailing mode (trail by 'trail' pts)
-    # 5. Let winners run until trailing stop is hit
+    # 3. At TP level: switch to trailing mode (trail by 'trail' pts)
+    # 4. Let winners run until trailing stop is hit
 
     contracts = cfg['contracts']
     trail_pts = cfg.get('trail', 5)
-    breakeven_trigger = tp_pts / 2  # Halfway to TP
+    fee_per_contract = FEES[symbol]['round_trip'] if include_fees else 0
 
     results = []
     for idx, trade in trades_df.iterrows():
@@ -366,7 +395,6 @@ def run_backtest(symbol, cfg, use_breakeven=True):
         max_adverse = 0.0
 
         # State tracking
-        breakeven_hit = False
         trailing_active = False
         best_price = entry  # Track best price for trailing
 
@@ -387,12 +415,7 @@ def run_backtest(symbol, cfg, use_breakeven=True):
                 if fh > best_price:
                     best_price = fh
 
-                # Check breakeven trigger (halfway to TP) - only if enabled
-                if use_breakeven and not breakeven_hit and fh >= entry + breakeven_trigger:
-                    breakeven_hit = True
-                    current_sl = entry  # Move to breakeven
-
-                # Check trailing trigger (full TP reached)
+                # Check trailing trigger (TP level reached)
                 if not trailing_active and fh >= entry + tp_pts:
                     trailing_active = True
                     current_sl = fh - trail_pts  # Start trailing
@@ -409,8 +432,6 @@ def run_backtest(symbol, cfg, use_breakeven=True):
                     exit_bar = fb['Datetime']
                     if exit_price > entry:
                         outcome = 'WIN'
-                    elif exit_price == entry:
-                        outcome = 'BREAKEVEN'
                     else:
                         outcome = 'LOSS'
                     break
@@ -424,12 +445,7 @@ def run_backtest(symbol, cfg, use_breakeven=True):
                 if fl < best_price:
                     best_price = fl
 
-                # Check breakeven trigger - only if enabled
-                if use_breakeven and not breakeven_hit and fl <= entry - breakeven_trigger:
-                    breakeven_hit = True
-                    current_sl = entry
-
-                # Check trailing trigger
+                # Check trailing trigger (TP level reached)
                 if not trailing_active and fl <= entry - tp_pts:
                     trailing_active = True
                     current_sl = fl + trail_pts
@@ -446,14 +462,12 @@ def run_backtest(symbol, cfg, use_breakeven=True):
                     exit_bar = fb['Datetime']
                     if exit_price < entry:
                         outcome = 'WIN'
-                    elif exit_price == entry:
-                        outcome = 'BREAKEVEN'
                     else:
                         outcome = 'LOSS'
                     break
 
         # Calculate P&L
-        if outcome in ['WIN', 'LOSS', 'BREAKEVEN']:
+        if outcome in ['WIN', 'LOSS']:
             if is_long:
                 pnl_pts = exit_price - entry
             else:
@@ -462,6 +476,8 @@ def run_backtest(symbol, cfg, use_breakeven=True):
             pnl_pts = 0.0
 
         pnl_usd = pnl_pts * pv * contracts
+        fees_usd = fee_per_contract * contracts
+        pnl_usd_net = pnl_usd - fees_usd
 
         results.append({
             **trade,
@@ -469,17 +485,18 @@ def run_backtest(symbol, cfg, use_breakeven=True):
             'exit_price':    exit_price,
             'exit_time':     exit_bar,
             'pnl_pts':       pnl_pts,
-            'pnl_usd':       pnl_usd,
+            'pnl_usd_gross': pnl_usd,
+            'fees_usd':      fees_usd,
+            'pnl_usd':       pnl_usd_net,
             'bars_held':     bars_held,
             'max_favorable_excursion': max_favorable,
             'max_adverse_excursion': max_adverse,
-            'breakeven_hit': breakeven_hit,
             'trailing_active': trailing_active,
             'contracts':     contracts,
         })
 
     res_df = pd.DataFrame(results)
-    closed = res_df[res_df['outcome'].isin(['WIN','LOSS','BREAKEVEN'])].copy()
+    closed = res_df[res_df['outcome'].isin(['WIN','LOSS'])].copy()
 
     if closed.empty:
         print("  No closed trades.")
@@ -489,13 +506,12 @@ def run_backtest(symbol, cfg, use_breakeven=True):
     total       = len(closed)
     wins        = (closed['outcome'] == 'WIN').sum()
     losses      = (closed['outcome'] == 'LOSS').sum()
-    breakevens  = (closed['outcome'] == 'BREAKEVEN').sum()
 
-    # Win rate = wins / (wins + losses) - breakevens don't count
-    resolved  = wins + losses
-    win_rate  = wins / resolved * 100 if resolved > 0 else 0
+    win_rate  = wins / total * 100 if total > 0 else 0
 
     total_pnl   = closed['pnl_usd'].sum()
+    total_fees  = closed['fees_usd'].sum()
+    total_gross = closed['pnl_usd_gross'].sum()
     avg_win     = closed[closed['outcome']=='WIN']['pnl_usd'].mean() if wins > 0 else 0
     avg_loss    = closed[closed['outcome']=='LOSS']['pnl_usd'].mean() if losses > 0 else 0
 
@@ -506,7 +522,6 @@ def run_backtest(symbol, cfg, use_breakeven=True):
 
     # Trailing stats
     trails_triggered = closed['trailing_active'].sum()
-    be_triggered = closed['breakeven_hit'].sum()
     avg_win_pts = closed[closed['outcome']=='WIN']['pnl_pts'].mean() if wins > 0 else 0
     avg_loss_pts = closed[closed['outcome']=='LOSS']['pnl_pts'].mean() if losses > 0 else 0
 
@@ -635,9 +650,11 @@ def run_backtest(symbol, cfg, use_breakeven=True):
     print(f"  Total Bars:       {len(df):,}")
     print(f"  Contracts:        {contracts}")
     print(f"  Total trades:     {total:,}")
-    print(f"  Wins/Losses/BE:   {wins:,} / {losses:,} / {breakevens:,}")
+    print(f"  Wins/Losses:      {wins:,} / {losses:,}")
     print(f"  Win Rate:         {win_rate:.1f}%")
-    print(f"  Total P&L:        ${total_pnl:,.0f}")
+    print(f"  Gross P&L:        ${total_gross:,.0f}")
+    print(f"  Total Fees:       ${total_fees:,.0f}")
+    print(f"  Net P&L:          ${total_pnl:,.0f}")
     print(f"  Avg Win:          ${avg_win:,.0f} ({avg_win_pts:.1f} pts)")
     print(f"  Avg Loss:         ${avg_loss:,.0f} ({avg_loss_pts:.1f} pts)")
     print(f"  Profit Factor:    {profit_factor:.2f}")
@@ -650,7 +667,6 @@ def run_backtest(symbol, cfg, use_breakeven=True):
     print(f"  Recovery Factor:  {recovery_factor:.1f}x")
     print(f"  Max Consec Wins:  {max_consec_wins}")
     print(f"  Max Consec Losses:{max_consec_losses}")
-    print(f"  BE Triggered:     {be_triggered:,} ({be_triggered/total*100:.1f}%)")
     print(f"  Trails Triggered: {trails_triggered:,} ({trails_triggered/total*100:.1f}%)")
     print(f"\n  ── By Year ──────────────────────────────")
     print(by_year.to_string())
@@ -669,11 +685,14 @@ def run_backtest(symbol, cfg, use_breakeven=True):
         'df':       df,
         'trades':   res_df,
         'closed':   closed,
-        'mode':     'BE+Trail' if use_breakeven else 'Trail Only',
+        'mode':     'Trail Only',
+        'include_fees': include_fees,
         'stats': {
-            'total': total, 'wins': wins, 'losses': losses, 'breakevens': breakevens,
+            'total': total, 'wins': wins, 'losses': losses,
             'win_rate': win_rate,
             'total_pnl': total_pnl,
+            'total_gross': total_gross,
+            'total_fees': total_fees,
             'avg_win': avg_win, 'avg_loss': avg_loss,
             'avg_win_pts': avg_win_pts, 'avg_loss_pts': avg_loss_pts,
             'profit_factor': profit_factor, 'max_dd': max_dd,
@@ -692,9 +711,7 @@ def run_backtest(symbol, cfg, use_breakeven=True):
             'data_end': df.index[-1],
             'total_bars': len(df),
             'contracts': contracts,
-            'be_triggered': be_triggered,
             'trails_triggered': trails_triggered,
-            'use_breakeven': use_breakeven,
         },
         'by_level': by_level,
         'by_sess':  by_sess,
@@ -1158,7 +1175,7 @@ def build_report(all_results):
     # BUILD HTML
     # ═══════════════════════════════════════════════════════════════════════════
     rows_html = ''
-    totals = {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0}
+    totals = {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0, 'gross': 0, 'fees': 0}
 
     for r in all_results:
         if r is None:
@@ -1168,6 +1185,8 @@ def build_report(all_results):
         totals['wins'] += s['wins']
         totals['losses'] += s['losses']
         totals['pnl'] += s['total_pnl']
+        totals['gross'] += s.get('total_gross', s['total_pnl'])
+        totals['fees'] += s.get('total_fees', 0)
 
         rows_html += f"""
         <tr>
@@ -1177,6 +1196,8 @@ def build_report(all_results):
           <td class="green">{s['wins']:,}</td>
           <td class="red">{s['losses']:,}</td>
           <td class="{'green' if s['win_rate']>=50 else 'red'} bold">{s['win_rate']:.1f}%</td>
+          <td class="green">${s.get('total_gross', s['total_pnl']):,.0f}</td>
+          <td class="red">-${s.get('total_fees', 0):,.0f}</td>
           <td class="{'green' if s['total_pnl']>=0 else 'red'} bold">${s['total_pnl']:,.0f}</td>
           <td class="green">${s['avg_win']:,.0f}</td>
           <td class="red">${s['avg_loss']:,.0f}</td>
@@ -1194,6 +1215,8 @@ def build_report(all_results):
           <td class="green">{totals['wins']:,}</td>
           <td class="red">{totals['losses']:,}</td>
           <td class="{'green' if total_wr>=50 else 'red'} bold">{total_wr:.1f}%</td>
+          <td class="green">${totals['gross']:,.0f}</td>
+          <td class="red">-${totals['fees']:,.0f}</td>
           <td class="{'green' if totals['pnl']>=0 else 'red'} bold">${totals['pnl']:,.0f}</td>
           <td colspan="4"></td>
         </tr>"""
@@ -1422,10 +1445,10 @@ def build_report(all_results):
   </div>
 
   <div class="summary-section">
-    <h2>Performance Summary — $100K Starting Capital | Trail Only Mode</h2>
+    <h2>Performance Summary — $100K Starting Capital | Trail Mode | Fees Included</h2>
     <table>
       <thead>
-        <tr><th>Symbol</th><th>Cts</th><th>Trades</th><th>Wins</th><th>Losses</th><th>Win Rate</th><th>Total P&L</th><th>Avg Win</th><th>Avg Loss</th><th>PF</th><th>Max DD</th></tr>
+        <tr><th>Symbol</th><th>Cts</th><th>Trades</th><th>Wins</th><th>Losses</th><th>Win Rate</th><th>Gross P&L</th><th>Fees</th><th>Net P&L</th><th>Avg Win</th><th>Avg Loss</th><th>PF</th><th>Max DD</th></tr>
       </thead>
       <tbody>{rows_html}</tbody>
     </table>
@@ -1450,8 +1473,8 @@ def build_report(all_results):
   <div class="disclaimer">
     <strong>⚠ DISCLAIMER:</strong> These results are based on <strong>simulated/hypothetical performance</strong> using historical data. All trades shown were generated by backtesting software and do not represent actual trades. Past performance, whether actual or simulated, is not indicative of future results.<br><br>
     <strong>Important considerations:</strong><br>
-    • Slippage, commissions, and fees are NOT included in these calculations<br>
-    • Real-world execution may differ significantly from simulated results<br>
+    • Commissions & fees ARE included (~$1.50/contract round-trip)<br>
+    • Slippage is NOT included — real-world execution may differ<br>
     • Market conditions change and past patterns may not repeat<br>
     • This data is for educational purposes only and should not be considered financial advice<br>
     • Trading futures involves substantial risk of loss and is not suitable for all investors<br><br>
@@ -1530,7 +1553,7 @@ def run_full_optimization():
 
                     try:
                         # Run backtest (suppress detailed output)
-                        result = run_backtest(symbol, test_cfg, use_breakeven=False)
+                        result = run_backtest(symbol, test_cfg, include_fees=False)
 
                         if result:
                             pnl = result['stats']['total_pnl']
@@ -1809,7 +1832,7 @@ def run_trail_optimization(trail_values=[5, 10, 15, 20, 25, 30]):
             test_cfg['trail'] = trail
 
             try:
-                result = run_backtest(symbol, test_cfg, use_breakeven=False)
+                result = run_backtest(symbol, test_cfg, include_fees=False)
                 trail_results.append(result)
             except Exception as e:
                 print(f"  ERROR on {symbol}: {e}")
@@ -1995,7 +2018,7 @@ def build_trail_optimization_report(all_trail_results, optimal_trail):
   </table>
 
   <div class="note">
-    <strong>Methodology:</strong> All tests run in "Trail Only" mode (no breakeven at halfway).
+    <strong>Methodology:</strong> All tests run in Trail Mode with trailing stops activated at TP level.
     Trail activates when price reaches full TP target (40pts MNQ, 20pts MES/MGC), then follows price by the trail distance.
     <br><br>
     <strong>Recommendation:</strong> Use <span class="accent">{optimal_trail}pt trail</span> for optimal risk-adjusted returns.
@@ -2061,14 +2084,14 @@ def run_oos_test(oos_split_year=2024):
         is_cfg = cfg.copy()
         is_cfg['file'] = is_path
         print(f"\n  Running In-Sample backtest...")
-        is_result = run_backtest(symbol + '_IS', is_cfg, use_breakeven=False)
+        is_result = run_backtest(symbol + '_IS', is_cfg, include_fees=False)
         is_results.append(is_result)
 
         # Run OOS backtest
         oos_cfg = cfg.copy()
         oos_cfg['file'] = oos_path
         print(f"\n  Running Out-of-Sample backtest...")
-        oos_result = run_backtest(symbol + '_OOS', oos_cfg, use_breakeven=False)
+        oos_result = run_backtest(symbol + '_OOS', oos_cfg, include_fees=False)
         oos_results.append(oos_result)
 
         # Cleanup temp files
@@ -2288,227 +2311,11 @@ def build_oos_report(is_results, oos_results, split_year):
     return out_path
 
 
-def build_comparison_report(be_results, no_be_results):
-    """Build comparison report between BE+Trail and Trail Only modes."""
-
-    # Calculate totals for each mode
-    def calc_totals(results):
-        totals = {'pnl': 0, 'wins': 0, 'losses': 0, 'breakevens': 0, 'trades': 0}
-        for r in results:
-            if r is None:
-                continue
-            s = r['stats']
-            totals['pnl'] += s['total_pnl']
-            totals['wins'] += s['wins']
-            totals['losses'] += s['losses']
-            totals['breakevens'] += s['breakevens']
-            totals['trades'] += s['total']
-        totals['win_rate'] = totals['wins'] / (totals['wins'] + totals['losses']) * 100 if (totals['wins'] + totals['losses']) > 0 else 0
-        return totals
-
-    be_totals = calc_totals(be_results)
-    no_be_totals = calc_totals(no_be_results)
-
-    # Build comparison table
-    date_range = ""
-    for r in be_results:
-        if r is not None:
-            date_range = f"{r['stats']['data_start'].strftime('%Y-%m-%d')} to {r['stats']['data_end'].strftime('%Y-%m-%d')}"
-            break
-
-    # Per-instrument comparison
-    inst_rows = ''
-    for be_r, no_be_r in zip(be_results, no_be_results):
-        if be_r is None or no_be_r is None:
-            continue
-        symbol = be_r['symbol']
-        be_s = be_r['stats']
-        no_be_s = no_be_r['stats']
-        diff = no_be_s['total_pnl'] - be_s['total_pnl']
-        diff_pct = (no_be_s['total_pnl'] / be_s['total_pnl'] - 1) * 100 if be_s['total_pnl'] != 0 else 0
-        diff_class = 'green' if diff > 0 else 'red' if diff < 0 else ''
-
-        inst_rows += f"""
-        <tr>
-          <td><span class="symbol">{symbol}</span></td>
-          <td class="{'green' if be_s['total_pnl']>=0 else 'red'}">${be_s['total_pnl']:,.0f}</td>
-          <td>{be_s['win_rate']:.1f}%</td>
-          <td>{be_s['breakevens']:,}</td>
-          <td class="{'green' if no_be_s['total_pnl']>=0 else 'red'}">${no_be_s['total_pnl']:,.0f}</td>
-          <td>{no_be_s['win_rate']:.1f}%</td>
-          <td>{no_be_s['breakevens']:,}</td>
-          <td class="{diff_class} bold">{'+' if diff>0 else ''}{diff:,.0f} ({'+' if diff_pct>0 else ''}{diff_pct:.1f}%)</td>
-        </tr>"""
-
-    # Totals row
-    total_diff = no_be_totals['pnl'] - be_totals['pnl']
-    total_diff_pct = (no_be_totals['pnl'] / be_totals['pnl'] - 1) * 100 if be_totals['pnl'] != 0 else 0
-    total_diff_class = 'green' if total_diff > 0 else 'red' if total_diff < 0 else ''
-
-    inst_rows += f"""
-    <tr class="totals-row">
-      <td><span class="symbol">TOTAL</span></td>
-      <td class="{'green' if be_totals['pnl']>=0 else 'red'}">${be_totals['pnl']:,.0f}</td>
-      <td>{be_totals['win_rate']:.1f}%</td>
-      <td>{be_totals['breakevens']:,}</td>
-      <td class="{'green' if no_be_totals['pnl']>=0 else 'red'}">${no_be_totals['pnl']:,.0f}</td>
-      <td>{no_be_totals['win_rate']:.1f}%</td>
-      <td>{no_be_totals['breakevens']:,}</td>
-      <td class="{total_diff_class} bold">{'+' if total_diff>0 else ''}{total_diff:,.0f} ({'+' if total_diff_pct>0 else ''}{total_diff_pct:.1f}%)</td>
-    </tr>"""
-
-    # Year-over-year comparison
-    be_all_closed = pd.concat([r['closed'].assign(symbol=r['symbol']) for r in be_results if r is not None], ignore_index=True)
-    no_be_all_closed = pd.concat([r['closed'].assign(symbol=r['symbol']) for r in no_be_results if r is not None], ignore_index=True)
-
-    be_all_closed['year'] = pd.to_datetime(be_all_closed['date']).dt.year
-    no_be_all_closed['year'] = pd.to_datetime(no_be_all_closed['date']).dt.year
-
-    be_by_year = be_all_closed.groupby('year')['pnl_usd'].sum()
-    no_be_by_year = no_be_all_closed.groupby('year')['pnl_usd'].sum()
-
-    year_rows = ''
-    for year in sorted(set(be_by_year.index) | set(no_be_by_year.index)):
-        be_pnl = be_by_year.get(year, 0)
-        no_be_pnl = no_be_by_year.get(year, 0)
-        diff = no_be_pnl - be_pnl
-        diff_class = 'green' if diff > 0 else 'red' if diff < 0 else ''
-        year_rows += f"""
-        <tr>
-          <td>{int(year)}</td>
-          <td class="{'green' if be_pnl>=0 else 'red'}">${be_pnl:,.0f}</td>
-          <td class="{'green' if no_be_pnl>=0 else 'red'}">${no_be_pnl:,.0f}</td>
-          <td class="{diff_class}">{'+' if diff>0 else ''}{diff:,.0f}</td>
-        </tr>"""
-
-    html = f"""<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>KLBS Strategy Comparison — THE EDGE</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
-    * {{ margin:0; padding:0; box-sizing:border-box; }}
-    body {{ background:#080808; color:#e0e0e0; font-family:'JetBrains Mono',monospace; padding:40px; line-height:1.6; }}
-    .header {{ text-align:center; margin-bottom:40px; padding-bottom:30px; border-bottom:1px solid #222; }}
-    h1 {{ font-size:36px; letter-spacing:4px; margin-bottom:8px; font-weight:700; }}
-    .accent {{ color:#c8f54a; }}
-    .green {{ color:#00c853; }}
-    .red {{ color:#ef5350; }}
-    .bold {{ font-weight:700; }}
-    .subtitle {{ color:#666; font-size:12px; margin-bottom:8px; letter-spacing:2px; }}
-    .date-range {{ color:#888; font-size:14px; margin-top:10px; }}
-    table {{ width:100%; border-collapse:collapse; font-size:13px; background:#0a0a0a; border-radius:8px; overflow:hidden; margin-bottom:30px; }}
-    th {{ background:#111; color:#c8f54a; padding:14px 16px; text-align:left; font-size:11px; letter-spacing:1px; text-transform:uppercase; border-bottom:2px solid #222; }}
-    td {{ padding:12px 16px; border-bottom:1px solid #1a1a1a; }}
-    tr:hover td {{ background:#111; }}
-    .totals-row td {{ background:#111; border-top:2px solid #c8f54a; font-weight:700; }}
-    .symbol {{ color:#c8f54a; font-weight:700; }}
-    .section-header {{ font-size:14px; letter-spacing:2px; color:#c8f54a; margin:50px 0 24px 0; text-transform:uppercase; padding-bottom:12px; border-bottom:1px solid #222; }}
-    .summary-box {{ display:grid; grid-template-columns:repeat(2, 1fr); gap:24px; margin-bottom:40px; }}
-    .mode-box {{ background:#0d0d0d; border:1px solid #1a1a1a; border-radius:12px; padding:24px; text-align:center; }}
-    .mode-box h3 {{ color:#c8f54a; margin-bottom:16px; font-size:14px; }}
-    .mode-box .big-number {{ font-size:42px; font-weight:700; margin-bottom:8px; }}
-    .mode-box .label {{ color:#666; font-size:11px; text-transform:uppercase; }}
-    .winner {{ border-color:#c8f54a; }}
-    .conclusion {{ background:#0d0d0d; border:1px solid #1a1a1a; border-radius:12px; padding:24px; margin-top:40px; }}
-    .conclusion h3 {{ color:#c8f54a; margin-bottom:16px; }}
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>THE <span class="accent">EDGE</span></h1>
-    <div class="subtitle">STRATEGY COMPARISON — BREAKEVEN VS TRAIL ONLY</div>
-    <div class="date-range">Data: {date_range}</div>
-  </div>
-
-  <div class="summary-box">
-    <div class="mode-box {'winner' if be_totals['pnl'] >= no_be_totals['pnl'] else ''}">
-      <h3>Breakeven + Trail</h3>
-      <div class="big-number {'green' if be_totals['pnl']>=0 else 'red'}">${be_totals['pnl']:,.0f}</div>
-      <div class="label">Total P&L</div>
-      <div style="margin-top:16px; font-size:13px;">
-        Win Rate: <span class="green">{be_totals['win_rate']:.1f}%</span><br>
-        Breakevens: {be_totals['breakevens']:,}
-      </div>
-    </div>
-    <div class="mode-box {'winner' if no_be_totals['pnl'] > be_totals['pnl'] else ''}">
-      <h3>Trail Only (No BE)</h3>
-      <div class="big-number {'green' if no_be_totals['pnl']>=0 else 'red'}">${no_be_totals['pnl']:,.0f}</div>
-      <div class="label">Total P&L</div>
-      <div style="margin-top:16px; font-size:13px;">
-        Win Rate: <span class="{'green' if no_be_totals['win_rate']>=50 else 'red'}">{no_be_totals['win_rate']:.1f}%</span><br>
-        Breakevens: {no_be_totals['breakevens']:,}
-      </div>
-    </div>
-  </div>
-
-  <h2 class="section-header">Per-Instrument Comparison</h2>
-  <table>
-    <thead>
-      <tr>
-        <th rowspan="2">Symbol</th>
-        <th colspan="3" style="text-align:center; border-right:1px solid #333;">BE + Trail</th>
-        <th colspan="3" style="text-align:center; border-right:1px solid #333;">Trail Only</th>
-        <th rowspan="2">Difference</th>
-      </tr>
-      <tr>
-        <th>P&L</th><th>Win Rate</th><th>BE Count</th>
-        <th>P&L</th><th>Win Rate</th><th>BE Count</th>
-      </tr>
-    </thead>
-    <tbody>{inst_rows}</tbody>
-  </table>
-
-  <h2 class="section-header">Year-over-Year Comparison</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Year</th>
-        <th>BE + Trail P&L</th>
-        <th>Trail Only P&L</th>
-        <th>Difference</th>
-      </tr>
-    </thead>
-    <tbody>{year_rows}</tbody>
-  </table>
-
-  <div class="conclusion">
-    <h3>Analysis Summary</h3>
-    <p style="color:#888; line-height:1.8;">
-      <strong>Breakeven + Trail Mode:</strong> Moves stop to breakeven at 50% of target, then trails after full target is hit.
-      This protects partial profits but may result in more breakeven exits.<br><br>
-      <strong>Trail Only Mode:</strong> No breakeven protection at halfway. Holds original stop until full target is reached,
-      then activates trailing stop. More risk of full losses but potentially larger winners.<br><br>
-      <strong>Difference:</strong>
-      <span class="{total_diff_class} bold">
-        Trail Only is {'+' if total_diff>0 else ''}{total_diff:,.0f} ({'+' if total_diff_pct>0 else ''}{total_diff_pct:.1f}%)
-        {'better' if total_diff > 0 else 'worse'} than BE + Trail
-      </span>
-    </p>
-  </div>
-
-  <div style="margin-top:40px; padding:20px; background:#0d0d0d; border:1px solid #333; border-radius:8px; color:#666; font-size:11px;">
-    <strong style="color:#ef5350;">DISCLAIMER:</strong> These results are from backtesting on historical data and represent simulated/hypothetical performance.
-    Past performance does not guarantee future results. Slippage, commissions, and fees are NOT included.
-    <br><br><em>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</em>
-  </div>
-</body>
-</html>"""
-
-    out_path = os.path.join(PUBLIC_DIR, 'klbs_comparison_report.html')
-    with open(out_path, 'w') as f:
-        f.write(html)
-    print(f"\n✓ Comparison report saved: {out_path}")
-    return out_path
-
-
 # ── Run ───────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='KLBS Backtest')
-    parser.add_argument('--compare', action='store_true', help='Run comparison between BE+Trail and Trail Only')
-    parser.add_argument('--no-be', action='store_true', help='Run Trail Only mode (no breakeven)')
+    parser.add_argument('--no-fees', action='store_true', help='Run without fees/commissions')
     parser.add_argument('--optimize-trail', action='store_true', help='Find optimal trail distance')
     parser.add_argument('--trail-values', type=str, default='5,10,15,20,25,30', help='Trail values to test (comma-separated)')
     parser.add_argument('--optimize', action='store_true', help='Full parameter optimization (TP, SL, Trail)')
@@ -2535,7 +2342,7 @@ if __name__ == '__main__':
             final_cfg['sl'] = opt['sl']
             final_cfg['trail'] = opt['trail']
 
-            result = run_backtest(symbol, final_cfg, use_breakeven=False)
+            result = run_backtest(symbol, final_cfg, include_fees=not args.no_fees)
             final_results.append(result)
 
             if result:
@@ -2563,56 +2370,13 @@ if __name__ == '__main__':
 
         build_report(optimal_results)
 
-    elif args.compare:
-        # Run both modes for comparison
-        print("\n>>> Running BE + Trail mode...")
-        be_results = []
-        for symbol, cfg in INSTRUMENTS.items():
-            try:
-                result = run_backtest(symbol, cfg, use_breakeven=True)
-                be_results.append(result)
-            except Exception as e:
-                print(f"  ERROR on {symbol}: {e}")
-                import traceback
-                traceback.print_exc()
-                be_results.append(None)
-
-        print("\n>>> Running Trail Only mode (no breakeven)...")
-        no_be_results = []
-        for symbol, cfg in INSTRUMENTS.items():
-            try:
-                result = run_backtest(symbol, cfg, use_breakeven=False)
-                no_be_results.append(result)
-            except Exception as e:
-                print(f"  ERROR on {symbol}: {e}")
-                import traceback
-                traceback.print_exc()
-                no_be_results.append(None)
-
-        # Save trade logs
-        for r in be_results:
-            if r is None:
-                continue
-            csv_path = os.path.join(OUTPUT_DIR, f"klbs_{r['symbol']}_trades_be.csv")
-            r['closed'].to_csv(csv_path, index=False)
-
-        for r in no_be_results:
-            if r is None:
-                continue
-            csv_path = os.path.join(OUTPUT_DIR, f"klbs_{r['symbol']}_trades_no_be.csv")
-            r['closed'].to_csv(csv_path, index=False)
-
-        # Build reports
-        build_report(be_results)
-        build_comparison_report(be_results, no_be_results)
-
     else:
-        # Run single mode
-        use_be = not args.no_be
+        # Run standard backtest
+        include_fees = not args.no_fees
         all_results = []
         for symbol, cfg in INSTRUMENTS.items():
             try:
-                result = run_backtest(symbol, cfg, use_breakeven=use_be)
+                result = run_backtest(symbol, cfg, include_fees=include_fees)
                 all_results.append(result)
             except Exception as e:
                 print(f"  ERROR on {symbol}: {e}")
@@ -2623,8 +2387,7 @@ if __name__ == '__main__':
         for r in all_results:
             if r is None:
                 continue
-            suffix = '_be' if use_be else '_no_be'
-            csv_path = os.path.join(OUTPUT_DIR, f"klbs_{r['symbol']}_trades{suffix}.csv")
+            csv_path = os.path.join(OUTPUT_DIR, f"klbs_{r['symbol']}_trades.csv")
             r['closed'].to_csv(csv_path, index=False)
             print(f"  Trade log: {csv_path}")
 

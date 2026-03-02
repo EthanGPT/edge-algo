@@ -353,7 +353,7 @@ export default function EdgeCourse() {
                     <td className="px-4 py-3 font-semibold text-foreground">{inst.symbol}</td>
                     <td className="px-4 py-3 text-center text-muted-foreground">{inst.trades.toLocaleString()}</td>
                     <td className="px-4 py-3 text-center text-foreground">{inst.winRate}%</td>
-                    <td className="px-4 py-3 text-center text-accent font-medium">${inst.totalPnl.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-center text-accent font-medium">${inst.netPnl.toLocaleString()}</td>
                     <td className="px-4 py-3 text-center text-foreground">{inst.profitFactor}</td>
                   </tr>
                 ))}

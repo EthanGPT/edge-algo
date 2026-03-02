@@ -271,7 +271,7 @@ function BacktestShowcase() {
                   </h4>
                 </div>
                 <span className="font-mono text-xl font-bold text-[#c8f54a]">
-                  +${(inst.totalPnl / 1000).toFixed(0)}K
+                  +${(inst.netPnl / 1000).toFixed(0)}K
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-4 text-center">
