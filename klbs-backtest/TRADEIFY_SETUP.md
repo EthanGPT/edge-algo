@@ -1,5 +1,11 @@
 # Tradeify Funded Account Setup
 
+## Goal: $100K Payouts → Own Brokerage (ZAR)
+
+**Target:** $100,000 USD (~R1,850,000 ZAR)
+
+---
+
 ## Strategy: MNQ x2 (KLBS)
 
 **Stats:**
