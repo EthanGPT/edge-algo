@@ -6,6 +6,8 @@ import { HashRouter, Routes, Route } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { DataProvider } from "@/context/DataContext";
 import { MembershipProvider } from "@/context/MembershipContext";
+import { AuthProvider } from "@/context/AuthContext";
+import { BotProvider } from "@/context/BotContext";
 import { Paywall } from "@/components/Paywall";
 
 // Public pages
@@ -27,17 +29,26 @@ import Analytics from "./pages/Analytics";
 import Journal from "./pages/Journal";
 import NotFound from "./pages/NotFound";
 
+// Bot pages
+import Bots from "./pages/Bots";
+import BotDetail from "./pages/BotDetail";
+import BotAccounts from "./pages/BotAccounts";
+import BotTrades from "./pages/BotTrades";
+import BotAnalytics from "./pages/BotAnalytics";
+
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <DataProvider>
-      <MembershipProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <HashRouter>
-            <Routes>
+    <AuthProvider>
+      <BotProvider>
+        <DataProvider>
+          <MembershipProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <HashRouter>
+                <Routes>
               {/* Public routes - no sidebar */}
               <Route path="/" element={<Landing />} />
               <Route path="/backtest" element={<Backtest />} />
@@ -159,12 +170,54 @@ const App = () => (
                   </AppLayout>
                 }
               />
+              <Route
+                path="/bots"
+                element={
+                  <AppLayout>
+                    <Bots />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/bots/:id"
+                element={
+                  <AppLayout>
+                    <BotDetail />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/bot-accounts"
+                element={
+                  <AppLayout>
+                    <BotAccounts />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/bot-trades"
+                element={
+                  <AppLayout>
+                    <BotTrades />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/bot-analytics"
+                element={
+                  <AppLayout>
+                    <BotAnalytics />
+                  </AppLayout>
+                }
+              />
               <Route path="*" element={<NotFound />} />
-            </Routes>
-          </HashRouter>
-        </TooltipProvider>
-      </MembershipProvider>
-    </DataProvider>
+                </Routes>
+              </HashRouter>
+            </TooltipProvider>
+          </MembershipProvider>
+        </DataProvider>
+      </BotProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

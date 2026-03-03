@@ -9,6 +9,10 @@ import {
   Globe,
   Lock,
   PenLine,
+  Bot,
+  Wallet,
+  BarChart3,
+  ArrowRightLeft,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -36,6 +40,14 @@ const hubNav = [
 // Tools - requires Edge
 const toolsNav = [
   { title: "Econ Calendar", url: "/economic-calendar", icon: Globe, requiresEdge: true },
+];
+
+// Bot navigation - shared trading bot tracking
+const botNav = [
+  { title: "Bots", url: "/bots", icon: Bot },
+  { title: "Accounts", url: "/bot-accounts", icon: Wallet },
+  { title: "Trades", url: "/bot-trades", icon: ArrowRightLeft },
+  { title: "Analytics", url: "/bot-analytics", icon: BarChart3 },
 ];
 
 const syncConfig: Record<SyncStatus, { icon: typeof Cloud; label: string; color: string }> = {
@@ -141,6 +153,24 @@ export function AppSidebar() {
                   item={item}
                   isActive={location.pathname === item.url}
                   showLock={item.requiresEdge && !hasEdgeAccess}
+                />
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Bot Tracking section */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="px-3 text-xs font-medium uppercase tracking-wider text-sidebar-muted">
+            Bot Tracking
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="space-y-0.5">
+              {botNav.map((item) => (
+                <NavItem
+                  key={item.title}
+                  item={item}
+                  isActive={location.pathname === item.url || location.pathname.startsWith(item.url + '/')}
                 />
               ))}
             </SidebarMenu>
