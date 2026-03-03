@@ -69,6 +69,4 @@
 - **Trading & Strategy**: Market structure, KLBS edge, execution rules
 - **ML & Engineering**: Sentiment analysis, infrastructure, automation
 
----
 
-Built with conviction. Executed with precision.
