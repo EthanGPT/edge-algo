@@ -507,8 +507,8 @@ function TradeForm({ bots, accounts, initialData, defaultBotId, onSave, onClose 
         }
   );
 
-  // Filter accounts for selected bot
-  const botAccounts = accounts.filter((a) => a.bot_id === formData.bot_id);
+  // Show all accounts (not filtered by bot - user can pick any)
+  const allAccounts = accounts;
 
   const handleBotChange = (botId: string) => {
     const bot = bots.find((b) => b.id === botId);
@@ -555,7 +555,7 @@ function TradeForm({ bots, accounts, initialData, defaultBotId, onSave, onClose 
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">No specific account</SelectItem>
-              {botAccounts.map((a) => (
+              {allAccounts.map((a) => (
                 <SelectItem key={a.id} value={a.id}>
                   {a.account_name}
                 </SelectItem>
@@ -707,7 +707,8 @@ function ImportForm({ bots, accounts, onImport, onClose }: ImportFormProps) {
   const [parsedTrades, setParsedTrades] = useState<BotTradeFormData[]>([]);
   const [error, setError] = useState("");
 
-  const botAccounts = accounts.filter((a) => a.bot_id === botId);
+  // Show all accounts (not filtered by bot - user can pick any)
+  const allAccounts = accounts;
   const selectedBot = bots.find((b) => b.id === botId);
 
   const parseNumber = (str: string): number => {
@@ -876,7 +877,7 @@ function ImportForm({ bots, accounts, onImport, onClose }: ImportFormProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">No specific account</SelectItem>
-              {botAccounts.map((a) => (
+              {allAccounts.map((a) => (
                 <SelectItem key={a.id} value={a.id}>
                   {a.account_name}
                 </SelectItem>
