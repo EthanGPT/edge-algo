@@ -29,18 +29,16 @@ export interface Database {
   };
 }
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const supabaseUrlRaw = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKeyRaw = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-// Debug: log what we got (show actual values to debug)
-console.log('[Supabase] URL:', supabaseUrl);
-console.log('[Supabase] Key (first 20 chars):', supabaseAnonKey?.substring(0, 20));
+// Trim whitespace from env vars (GitHub secrets can have trailing newlines)
+const supabaseUrl = supabaseUrlRaw?.trim();
+const supabaseAnonKey = supabaseAnonKeyRaw?.trim();
 
 // Check if Supabase is configured
 export function isSupabaseConfigured(): boolean {
-  const configured = Boolean(supabaseUrl?.trim() && supabaseAnonKey?.trim());
-  console.log('[Supabase] isConfigured:', configured);
-  return configured;
+  return Boolean(supabaseUrl && supabaseAnonKey);
 }
 
 // Create client only if configured
