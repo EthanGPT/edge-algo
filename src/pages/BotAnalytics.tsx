@@ -39,10 +39,18 @@ import {
   History,
   Bot,
   Plus,
+  Target,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useBots } from "@/context/BotContext";
 import { useAuth } from "@/context/AuthContext";
+import { useBenchmarks } from "@/hooks/useBenchmarks";
+import {
+  RollingBenchmarkCard,
+  RiskMetricsCard,
+  PortfolioBenchmarkTable,
+  BacktestImporter,
+} from "@/components/benchmarks";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -72,7 +80,8 @@ const PIE_COLORS = ["#10b981", "#ef4444", "#6b7280", "#3b82f6", "#f59e0b", "#8b5
 
 export default function BotAnalytics() {
   const { user, isConfigured } = useAuth();
-  const { bots, botTrades, backtestData, loading, updateBacktestData } = useBots();
+  const { bots, botTrades, backtestTrades, backtestData, loading, updateBacktestData } = useBots();
+  const { calculateRiskMetrics, getRollingBenchmark, getPortfolioBenchmark } = useBenchmarks();
   const [searchParams] = useSearchParams();
   const botIdParam = searchParams.get("bot");
 
@@ -437,6 +446,59 @@ export default function BotAnalytics() {
     { name: "Losses", value: metrics.losses, color: COLORS.loss },
   ].filter(d => d.value > 0), [metrics]);
 
+  // Advanced Benchmark: Rolling monthly comparison for selected bot
+  const rollingBenchmark = useMemo(() => {
+    if (selectedBot === "all" || backtestTrades.length === 0) return null;
+
+    const bot = bots.find(b => b.id === selectedBot);
+    if (!bot) return null;
+
+    const botLiveTrades = botTrades.filter(t => t.bot_id === selectedBot);
+    const botBacktestTrades = backtestTrades.filter(t => t.bot_id === selectedBot);
+
+    return getRollingBenchmark(
+      botLiveTrades,
+      botBacktestTrades,
+      bot.default_contracts,
+      1 // backtest was at 1 contract
+    );
+  }, [selectedBot, bots, botTrades, backtestTrades, getRollingBenchmark]);
+
+  // Advanced Benchmark: Live risk metrics for selected bot/all
+  const liveRiskMetrics = useMemo(() => {
+    const trades = selectedBot === "all"
+      ? botTrades.filter(t => t.status === 'closed')
+      : botTrades.filter(t => t.bot_id === selectedBot && t.status === 'closed');
+    return calculateRiskMetrics(trades, 1);
+  }, [selectedBot, botTrades, calculateRiskMetrics]);
+
+  // Advanced Benchmark: Backtest risk metrics for comparison
+  const backtestRiskMetrics = useMemo(() => {
+    if (selectedBot === "all") return undefined;
+    const trades = backtestTrades.filter(t => t.bot_id === selectedBot);
+    if (trades.length === 0) return undefined;
+    const bot = bots.find(b => b.id === selectedBot);
+    // Scale to match live contract size
+    return calculateRiskMetrics(trades, bot?.default_contracts || 1);
+  }, [selectedBot, backtestTrades, bots, calculateRiskMetrics]);
+
+  // Advanced Benchmark: Portfolio-level comparison across all bots
+  const portfolioBenchmark = useMemo(() => {
+    if (bots.length === 0) return null;
+
+    const portfolioData = bots.map(bot => ({
+      id: bot.id,
+      name: `${bot.name} ${bot.version}`,
+      instrument: bot.instrument,
+      contracts: bot.default_contracts,
+      liveTrades: botTrades.filter(t => t.bot_id === bot.id),
+      backtestTrades: backtestTrades.filter(t => t.bot_id === bot.id),
+      backtestContracts: 1,
+    }));
+
+    return getPortfolioBenchmark(portfolioData);
+  }, [bots, botTrades, backtestTrades, getPortfolioBenchmark]);
+
   const formatCurrency = (val: number) =>
     `${val >= 0 ? "+" : ""}$${Math.abs(val).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
@@ -680,11 +742,15 @@ export default function BotAnalytics() {
 
       {/* Tabs */}
       <Tabs defaultValue="time" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="time">Time</TabsTrigger>
           <TabsTrigger value="direction">Direction</TabsTrigger>
           <TabsTrigger value="risk">Risk</TabsTrigger>
           <TabsTrigger value="benchmark">Benchmark</TabsTrigger>
+          <TabsTrigger value="advanced">
+            <Target className="h-3 w-3 mr-1" />
+            Advanced
+          </TabsTrigger>
         </TabsList>
 
         {/* TIME TAB */}
@@ -1072,6 +1138,62 @@ export default function BotAnalytics() {
                 </div>
               </div>
             </>
+          )}
+        </TabsContent>
+
+        {/* ADVANCED BENCHMARK TAB */}
+        <TabsContent value="advanced" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium flex items-center gap-2">
+                <Target className="h-5 w-5" />
+                Advanced Benchmarking
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Rolling monthly benchmarks with risk-adjusted metrics
+              </p>
+            </div>
+            {selectedBot !== "all" && (
+              <div className="text-sm text-muted-foreground">
+                Comparing: {botMap.get(selectedBot)?.name || "Selected Bot"}
+              </div>
+            )}
+          </div>
+
+          {backtestTrades.length === 0 ? (
+            <div className="space-y-6">
+              <div className="rounded-lg border border-dashed border-muted-foreground/30 p-8 text-center">
+                <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+                <h4 className="font-medium mb-2">No Backtest Data Available</h4>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Import your backtest trade data to enable advanced benchmarking features
+                  including rolling monthly comparisons and risk-adjusted metrics.
+                </p>
+              </div>
+              <BacktestImporter />
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Rolling Benchmark + Risk Metrics */}
+              <div className="grid gap-6 lg:grid-cols-2">
+                <RollingBenchmarkCard benchmark={rollingBenchmark} />
+                <RiskMetricsCard
+                  liveMetrics={liveRiskMetrics}
+                  benchmarkMetrics={backtestRiskMetrics}
+                  showComparison={selectedBot !== "all" && !!backtestRiskMetrics}
+                />
+              </div>
+
+              {/* Portfolio Benchmark */}
+              {bots.length > 1 && (
+                <PortfolioBenchmarkTable benchmark={portfolioBenchmark} />
+              )}
+
+              {/* Backtest Import Section */}
+              <div className="pt-4 border-t">
+                <BacktestImporter />
+              </div>
+            </div>
           )}
         </TabsContent>
       </Tabs>

@@ -116,16 +116,153 @@ export interface BotPerformanceMetrics {
   profit_factor: number;
 }
 
+// ============================================
+// BACKTEST TRADES & BENCHMARKING TYPES
+// ============================================
+
+export type BacktestOutcome = 'WIN' | 'LOSS' | 'BE';
+export type TradingSession = 'London' | 'NY';
+export type LevelType = 'PDH' | 'PDL' | 'PMH' | 'PML' | 'LPH' | 'LPL';
+export type BacktestDirection = 'LONG' | 'SHORT';
+
+// Individual backtest trade (granular data for monthly benchmarks)
+export interface BotBacktestTrade {
+  id: string;
+  bot_id: string;
+  trade_date: string;
+  exit_time?: string;
+  instrument: string;
+  level: LevelType;
+  direction: BacktestDirection;
+  entry_price: number;
+  exit_price?: number;
+  tp_price?: number;
+  sl_price?: number;
+  contracts: number;
+  outcome: BacktestOutcome;
+  pnl_pts?: number;
+  pnl_usd_gross?: number;
+  fees_usd?: number;
+  pnl_usd?: number;
+  session?: TradingSession;
+  day_of_week?: string;
+  hour?: number;
+  year: number;
+  month: number;
+  bars_held?: number;
+  max_favorable_excursion?: number;
+  max_adverse_excursion?: number;
+  trailing_active?: boolean;
+  source_file?: string;
+  created_at: string;
+}
+
+// Monthly benchmark aggregate (from view)
+export interface MonthlyBenchmark {
+  bot_id: string;
+  instrument: string;
+  month: number;  // 1-12
+  total_trades: number;
+  win_count: number;
+  loss_count: number;
+  net_pnl: number;
+  avg_winner: number;
+  avg_loser: number;
+  largest_winner: number;
+  largest_loser: number;
+  avg_contracts: number;
+  years_of_data: number;
+}
+
+// Risk-adjusted performance metrics
+export interface RiskMetrics {
+  sharpe_ratio: number;
+  sortino_ratio: number;
+  calmar_ratio: number;
+  max_drawdown: number;
+  max_drawdown_pct: number;
+  avg_monthly_return: number;
+  monthly_std_dev: number;
+  downside_deviation: number;
+  win_rate: number;
+  profit_factor: number;
+  expectancy: number;
+  recovery_factor: number;
+}
+
+// Rolling benchmark comparison (live vs historical same-month)
+export interface RollingBenchmarkComparison {
+  live: {
+    trades: number;
+    net_pnl: number;
+    win_rate: number;
+    avg_per_trade: number;
+    risk_metrics: RiskMetrics;
+  };
+  benchmark: {
+    trades: number;
+    net_pnl: number;  // scaled by contract ratio
+    win_rate: number;
+    avg_per_trade: number;
+    risk_metrics: RiskMetrics;
+    years_sampled: number;
+  };
+  variance: {
+    pnl_vs_expected: number;       // percentage
+    win_rate_diff: number;         // percentage points
+    performance_rating: 'outperforming' | 'meeting' | 'underperforming';
+  };
+  current_month: number;
+  month_name: string;
+  contract_scale_factor: number;
+}
+
+// Portfolio-level benchmark (combined across multiple bots)
+export interface PortfolioBenchmark {
+  bots: Array<{
+    bot_id: string;
+    bot_name: string;
+    instrument: string;
+    weight: number;  // percentage of portfolio (0-1)
+    contracts: number;
+    live_pnl: number;
+    benchmark_pnl: number;
+    variance_pct: number;
+  }>;
+  combined: {
+    total_live_pnl: number;
+    total_benchmark_pnl: number;
+    variance_pct: number;
+    portfolio_sharpe: number;
+    portfolio_sortino: number;
+    performance_rating: 'outperforming' | 'meeting' | 'underperforming';
+  };
+  period: {
+    month: number;
+    year: number;
+    month_name: string;
+  };
+}
+
 // Form types for creating/editing
 export type BotFormData = Omit<Bot, 'id' | 'created_by' | 'created_at' | 'updated_at'>;
 export type BotAccountFormData = Omit<BotAccount, 'id' | 'created_at' | 'updated_at' | 'total_pnl' | 'current_daily_pnl' | 'trading_days_count'>;
 export type BotTradeFormData = Omit<BotTrade, 'id' | 'created_at'>;
 export type BotBacktestFormData = Omit<BotBacktestData, 'id' | 'created_at'>;
+export type BotBacktestTradeFormData = Omit<BotBacktestTrade, 'id' | 'created_at'>;
 
-// Common instruments for bots
+// Common instruments for bots (including bonds and currencies)
 export const BOT_INSTRUMENTS = [
   'MNQ', 'NQ', 'MES', 'ES', 'MYM', 'YM', 'M2K', 'RTY',
   'MGC', 'GC', 'MCL', 'CL',
+  'ZN', 'ZB',  // Bonds
+  '6E', '6J',  // Currencies
+] as const;
+
+// Month names for display
+export const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
 ] as const;
 
 // Common prop firms for bot accounts

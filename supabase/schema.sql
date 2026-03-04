@@ -242,3 +242,80 @@ FROM bot_accounts ba
 JOIN bot_trades bt ON bt.bot_account_id = ba.id AND bt.status = 'closed'
 GROUP BY ba.id, ba.account_name, ba.bot_id, DATE(bt.timestamp)
 ORDER BY trade_date DESC;
+
+-- ============================================
+-- BOT BACKTEST TRADES TABLE (Granular trade-level backtest data)
+-- Used for monthly rolling benchmarks
+-- ============================================
+CREATE TABLE IF NOT EXISTS bot_backtest_trades (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  bot_id UUID NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+  trade_date TIMESTAMPTZ NOT NULL,
+  exit_time TIMESTAMPTZ,
+  instrument TEXT NOT NULL,
+  level TEXT NOT NULL,              -- PDH/PDL/PMH/PML/LPH/LPL
+  direction TEXT NOT NULL CHECK (direction IN ('LONG', 'SHORT')),
+  entry_price DECIMAL(12,4) NOT NULL,
+  exit_price DECIMAL(12,4),
+  tp_price DECIMAL(12,4),
+  sl_price DECIMAL(12,4),
+  contracts INTEGER NOT NULL DEFAULT 1,
+  outcome TEXT NOT NULL CHECK (outcome IN ('WIN', 'LOSS', 'BE')),
+  pnl_pts DECIMAL(10,4),
+  pnl_usd_gross DECIMAL(12,2),
+  fees_usd DECIMAL(8,2) DEFAULT 0,
+  pnl_usd DECIMAL(12,2),
+  session TEXT,                     -- London/NY
+  day_of_week TEXT,
+  hour INTEGER,
+  year INTEGER NOT NULL,
+  month INTEGER NOT NULL,
+  bars_held INTEGER,
+  max_favorable_excursion DECIMAL(10,4),
+  max_adverse_excursion DECIMAL(10,4),
+  trailing_active BOOLEAN DEFAULT FALSE,
+  source_file TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Indexes for benchmark queries
+CREATE INDEX IF NOT EXISTS idx_bt_trades_bot_id ON bot_backtest_trades(bot_id);
+CREATE INDEX IF NOT EXISTS idx_bt_trades_date ON bot_backtest_trades(trade_date);
+CREATE INDEX IF NOT EXISTS idx_bt_trades_month ON bot_backtest_trades(year, month);
+CREATE INDEX IF NOT EXISTS idx_bt_trades_instrument ON bot_backtest_trades(instrument);
+
+-- RLS for backtest trades
+ALTER TABLE bot_backtest_trades ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can view all bot_backtest_trades"
+  ON bot_backtest_trades FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Authenticated users can insert bot_backtest_trades"
+  ON bot_backtest_trades FOR INSERT TO authenticated WITH CHECK (true);
+
+CREATE POLICY "Authenticated users can update bot_backtest_trades"
+  ON bot_backtest_trades FOR UPDATE TO authenticated USING (true);
+
+CREATE POLICY "Authenticated users can delete bot_backtest_trades"
+  ON bot_backtest_trades FOR DELETE TO authenticated USING (true);
+
+-- ============================================
+-- MONTHLY BENCHMARK VIEW (Pre-aggregated for performance)
+-- ============================================
+CREATE OR REPLACE VIEW bot_monthly_benchmark AS
+SELECT
+  bot_id,
+  instrument,
+  month,
+  COUNT(*) as total_trades,
+  SUM(CASE WHEN outcome = 'WIN' THEN 1 ELSE 0 END) as win_count,
+  SUM(CASE WHEN outcome = 'LOSS' THEN 1 ELSE 0 END) as loss_count,
+  SUM(pnl_usd) as net_pnl,
+  AVG(CASE WHEN outcome = 'WIN' THEN pnl_usd END) as avg_winner,
+  AVG(CASE WHEN outcome = 'LOSS' THEN ABS(pnl_usd) END) as avg_loser,
+  MAX(pnl_usd) as largest_winner,
+  MIN(pnl_usd) as largest_loser,
+  AVG(contracts) as avg_contracts,
+  COUNT(DISTINCT year) as years_of_data
+FROM bot_backtest_trades
+GROUP BY bot_id, instrument, month;

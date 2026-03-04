@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
-import type { Bot, BotAccount, BotTrade, BotBacktestData, BotFormData, BotAccountFormData, BotTradeFormData, BotBacktestFormData } from '@/types/bots';
+import type { Bot, BotAccount, BotTrade, BotBacktestData, BotBacktestTrade, BotFormData, BotAccountFormData, BotTradeFormData, BotBacktestFormData, BotBacktestTradeFormData } from '@/types/bots';
 
 interface BotContextValue {
   // Data
@@ -10,6 +10,7 @@ interface BotContextValue {
   botAccounts: BotAccount[];
   botTrades: BotTrade[];
   backtestData: BotBacktestData[];
+  backtestTrades: BotBacktestTrade[];
   loading: boolean;
   error: string | null;
 
@@ -32,6 +33,11 @@ interface BotContextValue {
   addBacktestData: (data: BotBacktestFormData) => Promise<BotBacktestData | null>;
   updateBacktestData: (id: string, updates: Partial<BotBacktestFormData>) => Promise<void>;
   deleteBacktestData: (id: string) => Promise<void>;
+
+  // Backtest Trades (granular trade-level data)
+  importBacktestTrades: (trades: BotBacktestTradeFormData[], onProgress?: (current: number, total: number) => void) => Promise<{ inserted: number; errors: string[] }>;
+  deleteBacktestTradesForBot: (botId: string) => Promise<void>;
+  getBacktestTradesForBot: (botId: string) => BotBacktestTrade[];
 
   // Helpers
   getBotById: (id: string) => Bot | undefined;
@@ -99,6 +105,7 @@ export function BotProvider({ children }: { children: ReactNode }) {
   const [botAccounts, setBotAccounts] = useState<BotAccount[]>([]);
   const [botTrades, setBotTrades] = useState<BotTrade[]>([]);
   const [backtestData, setBacktestData] = useState<BotBacktestData[]>([]);
+  const [backtestTrades, setBacktestTrades] = useState<BotBacktestTrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -113,11 +120,12 @@ export function BotProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       setError(null);
 
-      const [botsRes, accountsRes, tradesRes, backtestRes] = await Promise.all([
+      const [botsRes, accountsRes, tradesRes, backtestRes, backtestTradesRes] = await Promise.all([
         supabase.from('bots').select('*').order('created_at', { ascending: false }),
         supabase.from('bot_accounts').select('*').order('created_at', { ascending: false }),
         supabase.from('bot_trades').select('*').order('timestamp', { ascending: false }),
         supabase.from('bot_backtest_data').select('*').order('period_end', { ascending: false }),
+        supabase.from('bot_backtest_trades').select('*').order('trade_date', { ascending: true }),
       ]);
 
       // Check for table not existing errors (code 42P01 or message contains "relation")
@@ -136,11 +144,16 @@ export function BotProvider({ children }: { children: ReactNode }) {
       checkTableError(accountsRes);
       checkTableError(tradesRes);
       checkTableError(backtestRes);
+      // Don't error if backtest_trades table doesn't exist yet (optional)
+      if (backtestTradesRes.error && !backtestTradesRes.error.message?.includes('does not exist')) {
+        checkTableError(backtestTradesRes);
+      }
 
       setBots(botsRes.data || []);
       setBotAccounts(accountsRes.data || []);
       setBotTrades(tradesRes.data || []);
       setBacktestData(backtestRes.data || []);
+      setBacktestTrades(backtestTradesRes.data || []);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch data';
       if (message === 'DATABASE_NOT_SETUP') {
@@ -189,6 +202,12 @@ export function BotProvider({ children }: { children: ReactNode }) {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'bot_backtest_data' }, () => fetchData())
         .subscribe();
       channels.push(backtestChannel);
+
+      const backtestTradesChannel = supabase
+        .channel('backtest-trades-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bot_backtest_trades' }, () => fetchData())
+        .subscribe();
+      channels.push(backtestTradesChannel);
     }
 
     return () => {
@@ -473,6 +492,66 @@ export function BotProvider({ children }: { children: ReactNode }) {
     setBacktestData(prev => prev.filter(d => d.id !== id));
   }, []);
 
+  // ── Backtest Trades (granular) ──────────────────────────────
+
+  const importBacktestTrades = useCallback(async (
+    trades: BotBacktestTradeFormData[],
+    onProgress?: (current: number, total: number) => void
+  ): Promise<{ inserted: number; errors: string[] }> => {
+    if (!supabase) return { inserted: 0, errors: ['Supabase not configured'] };
+
+    const errors: string[] = [];
+    let inserted = 0;
+    const chunkSize = 500;
+
+    for (let i = 0; i < trades.length; i += chunkSize) {
+      const chunk = trades.slice(i, i + chunkSize);
+      const chunkNum = Math.floor(i / chunkSize) + 1;
+
+      try {
+        const { error } = await supabase
+          .from('bot_backtest_trades')
+          .insert(chunk);
+
+        if (error) {
+          errors.push(`Chunk ${chunkNum}: ${error.message}`);
+        } else {
+          inserted += chunk.length;
+        }
+      } catch (e) {
+        errors.push(`Chunk ${chunkNum}: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      }
+
+      if (onProgress) {
+        onProgress(Math.min(i + chunkSize, trades.length), trades.length);
+      }
+    }
+
+    // Refresh data to get new trades
+    await fetchData();
+    return { inserted, errors };
+  }, [fetchData]);
+
+  const deleteBacktestTradesForBot = useCallback(async (botId: string) => {
+    if (!supabase) return;
+
+    const { error } = await supabase
+      .from('bot_backtest_trades')
+      .delete()
+      .eq('bot_id', botId);
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setBacktestTrades(prev => prev.filter(t => t.bot_id !== botId));
+  }, []);
+
+  const getBacktestTradesForBot = useCallback((botId: string) => {
+    return backtestTrades.filter(t => t.bot_id === botId);
+  }, [backtestTrades]);
+
   // ── Load KLBS Demo Data ──────────────────────────────────────
 
   const loadKLBSDemo = useCallback(async () => {
@@ -566,6 +645,7 @@ export function BotProvider({ children }: { children: ReactNode }) {
         botAccounts,
         botTrades,
         backtestData,
+        backtestTrades,
         loading,
         error,
         addBot,
@@ -580,6 +660,9 @@ export function BotProvider({ children }: { children: ReactNode }) {
         addBacktestData,
         updateBacktestData,
         deleteBacktestData,
+        importBacktestTrades,
+        deleteBacktestTradesForBot,
+        getBacktestTradesForBot,
         getBotById,
         getAccountsForBot,
         getTradesForBot,

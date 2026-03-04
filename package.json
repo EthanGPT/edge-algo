@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "import:backtest": "node scripts/import-backtest-trades.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -53,6 +54,7 @@
     "liveline": "^0.0.6",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
+    "papaparse": "^5.5.3",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
@@ -72,6 +74,7 @@
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",
     "@types/node": "^22.16.5",
+    "@types/papaparse": "^5.5.2",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react-swc": "^3.11.0",

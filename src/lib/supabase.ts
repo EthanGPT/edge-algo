@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Bot, BotAccount, BotTrade, BotBacktestData } from '@/types/bots';
+import type { Bot, BotAccount, BotTrade, BotBacktestData, BotBacktestTrade } from '@/types/bots';
 
 // Database types for Supabase
 export interface Database {
@@ -25,6 +25,11 @@ export interface Database {
         Insert: Omit<BotBacktestData, 'id' | 'created_at'>;
         Update: Partial<Omit<BotBacktestData, 'id' | 'created_at'>>;
       };
+      bot_backtest_trades: {
+        Row: BotBacktestTrade;
+        Insert: Omit<BotBacktestTrade, 'id' | 'created_at'>;
+        Update: Partial<Omit<BotBacktestTrade, 'id' | 'created_at'>>;
+      };
     };
   };
 }
@@ -35,15 +40,6 @@ const supabaseAnonKeyRaw = import.meta.env.VITE_SUPABASE_ANON_KEY as string | un
 // Trim whitespace from env vars (GitHub secrets can have trailing newlines)
 const supabaseUrl = supabaseUrlRaw?.trim();
 const supabaseAnonKey = supabaseAnonKeyRaw?.trim();
-
-// Debug: test basic fetch to Supabase
-if (supabaseUrl) {
-  fetch(`${supabaseUrl}/rest/v1/`, {
-    method: 'HEAD',
-    headers: { 'apikey': supabaseAnonKey || '' }
-  }).then(() => console.log('[Supabase] Connection test OK'))
-    .catch(e => console.error('[Supabase] Connection test FAILED:', e.message));
-}
 
 // Check if Supabase is configured
 export function isSupabaseConfigured(): boolean {
