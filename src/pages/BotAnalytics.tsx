@@ -49,7 +49,6 @@ import {
   RollingBenchmarkCard,
   RiskMetricsCard,
   PortfolioBenchmarkTable,
-  BacktestImporter,
 } from "@/components/benchmarks";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -1147,30 +1146,26 @@ export default function BotAnalytics() {
             <div>
               <h3 className="text-lg font-medium flex items-center gap-2">
                 <Target className="h-5 w-5" />
-                Advanced Benchmarking
+                Live vs Backtest Benchmark
               </h3>
               <p className="text-sm text-muted-foreground">
-                Rolling monthly benchmarks with risk-adjusted metrics
+                {backtestTrades.length.toLocaleString()} historical trades loaded
               </p>
             </div>
             {selectedBot !== "all" && (
               <div className="text-sm text-muted-foreground">
-                Comparing: {botMap.get(selectedBot)?.name || "Selected Bot"}
+                {botMap.get(selectedBot)?.name} - {botMap.get(selectedBot)?.instrument}
               </div>
             )}
           </div>
 
           {backtestTrades.length === 0 ? (
-            <div className="space-y-6">
-              <div className="rounded-lg border border-dashed border-muted-foreground/30 p-8 text-center">
-                <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-                <h4 className="font-medium mb-2">No Backtest Data Available</h4>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Import your backtest trade data to enable advanced benchmarking features
-                  including rolling monthly comparisons and risk-adjusted metrics.
-                </p>
-              </div>
-              <BacktestImporter />
+            <div className="rounded-lg border border-dashed border-muted-foreground/30 p-8 text-center">
+              <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+              <h4 className="font-medium mb-2">No Backtest Data</h4>
+              <p className="text-sm text-muted-foreground">
+                Run the import script to load backtest trades.
+              </p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -1188,11 +1183,6 @@ export default function BotAnalytics() {
               {bots.length > 1 && (
                 <PortfolioBenchmarkTable benchmark={portfolioBenchmark} />
               )}
-
-              {/* Backtest Import Section */}
-              <div className="pt-4 border-t">
-                <BacktestImporter />
-              </div>
             </div>
           )}
         </TabsContent>
