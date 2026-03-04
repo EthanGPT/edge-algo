@@ -48,9 +48,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Debug: try raw fetch first
     const url = import.meta.env.VITE_SUPABASE_URL?.trim();
-    const key = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
-    console.log('[Auth] Testing raw fetch to:', `${url}/auth/v1/token?grant_type=password`);
-    console.log('[Auth] Key length:', key?.length, 'Key valid chars:', /^[A-Za-z0-9._-]+$/.test(key || ''));
+    const keyRaw = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const key = keyRaw?.trim();
+    console.log('[Auth] Key RAW length:', keyRaw?.length, 'TRIMMED length:', key?.length);
+    console.log('[Auth] Key first 30:', JSON.stringify(key?.substring(0, 30)));
+    console.log('[Auth] Key last 30:', JSON.stringify(key?.substring(key.length - 30)));
+    // Find invalid chars
+    const invalidChars = key?.split('').filter((c: string) => !/[A-Za-z0-9._-]/.test(c));
+    console.log('[Auth] Invalid chars found:', JSON.stringify(invalidChars));
 
     try {
       const testRes = await fetch(`${url}/auth/v1/token?grant_type=password`, {
