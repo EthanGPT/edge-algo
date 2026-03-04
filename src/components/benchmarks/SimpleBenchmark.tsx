@@ -2,9 +2,10 @@
  * SimpleBenchmark - Clean backtest vs live comparison
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { BotTrade, BotBacktestTrade, Bot } from '@/types/bots';
 
@@ -100,17 +101,25 @@ function StatsRow({ label, backtest, live, format, higherIsBetter = true }: {
   );
 }
 
-function BenchmarkTable({ backtest, live, title }: { backtest: Stats; live: Stats; title: string }) {
+function BenchmarkTable({ backtest, live, title, contracts }: { backtest: Stats; live: Stats; title: string; contracts: number }) {
   const fmt = (v: number) => `$${Math.round(v).toLocaleString()}`;
   const pct = (v: number) => `${v.toFixed(1)}%`;
   const num = (v: number) => v.toFixed(2);
+
+  // Scale backtest dollar values by contracts (backtest was at 1 contract)
+  const scaledBacktest = {
+    ...backtest,
+    avgWin: backtest.avgWin * contracts,
+    avgLoss: backtest.avgLoss * contracts,
+    netPnl: backtest.netPnl * contracts,
+  };
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">{title}</CardTitle>
         <p className="text-xs text-muted-foreground">
-          Backtest: {backtest.trades.toLocaleString()} trades | Live: {live.trades} trades
+          Backtest: {backtest.trades.toLocaleString()} trades @ {contracts}ct | Live: {live.trades} trades
         </p>
       </CardHeader>
       <CardContent className="p-0">
@@ -125,12 +134,12 @@ function BenchmarkTable({ backtest, live, title }: { backtest: Stats; live: Stat
           </thead>
           <tbody>
             <StatsRow label="Win Rate" backtest={backtest.winRate} live={live.winRate} format={pct} />
-            <StatsRow label="Avg Win" backtest={backtest.avgWin} live={live.avgWin} format={fmt} />
-            <StatsRow label="Avg Loss" backtest={backtest.avgLoss} live={live.avgLoss} format={fmt} higherIsBetter={false} />
+            <StatsRow label="Avg Win" backtest={scaledBacktest.avgWin} live={live.avgWin} format={fmt} />
+            <StatsRow label="Avg Loss" backtest={scaledBacktest.avgLoss} live={live.avgLoss} format={fmt} higherIsBetter={false} />
             <StatsRow label="Profit Factor" backtest={backtest.profitFactor} live={live.profitFactor} format={num} />
             <StatsRow label="Sharpe" backtest={backtest.sharpe} live={live.sharpe} format={num} />
             <StatsRow label="Sortino" backtest={backtest.sortino} live={live.sortino} format={num} />
-            <StatsRow label="Net P&L" backtest={backtest.netPnl} live={live.netPnl} format={fmt} />
+            <StatsRow label="Net P&L" backtest={scaledBacktest.netPnl} live={live.netPnl} format={fmt} />
           </tbody>
         </table>
       </CardContent>
@@ -139,6 +148,8 @@ function BenchmarkTable({ backtest, live, title }: { backtest: Stats; live: Stat
 }
 
 export function SimpleBenchmark({ bots, liveTrades, backtestTrades }: SimpleBenchmarkProps) {
+  const [contracts, setContracts] = useState(1);
+
   // Get unique instruments
   const instruments = useMemo(() => {
     const set = new Set(bots.map(b => b.instrument));
@@ -183,32 +194,54 @@ export function SimpleBenchmark({ bots, liveTrades, backtestTrades }: SimpleBenc
   }
 
   return (
-    <Tabs defaultValue="combined" className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="combined">Combined</TabsTrigger>
-        {instruments.map(i => (
-          <TabsTrigger key={i} value={i}>{i}</TabsTrigger>
-        ))}
-      </TabsList>
+    <div className="space-y-4">
+      {/* Contract Selector */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-medium">Backtest vs Live Benchmark</h3>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Scale backtest to:</span>
+          <Select value={contracts.toString()} onValueChange={(v) => setContracts(parseInt(v))}>
+            <SelectTrigger className="w-24">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                <SelectItem key={n} value={n.toString()}>{n} ct</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
-      <TabsContent value="combined">
-        <BenchmarkTable
-          title="All Instruments Combined"
-          backtest={combinedStats.backtest}
-          live={combinedStats.live}
-        />
-      </TabsContent>
+      <Tabs defaultValue="combined" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="combined">Combined</TabsTrigger>
+          {instruments.map(i => (
+            <TabsTrigger key={i} value={i}>{i}</TabsTrigger>
+          ))}
+        </TabsList>
 
-      {instrumentStats.map(({ instrument, backtest, live }) => (
-        <TabsContent key={instrument} value={instrument}>
+        <TabsContent value="combined">
           <BenchmarkTable
-            title={instrument}
-            backtest={backtest}
-            live={live}
+            title="All Instruments Combined"
+            backtest={combinedStats.backtest}
+            live={combinedStats.live}
+            contracts={contracts}
           />
         </TabsContent>
-      ))}
-    </Tabs>
+
+        {instrumentStats.map(({ instrument, backtest, live }) => (
+          <TabsContent key={instrument} value={instrument}>
+            <BenchmarkTable
+              title={instrument}
+              backtest={backtest}
+              live={live}
+              contracts={contracts}
+            />
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
   );
 }
 
