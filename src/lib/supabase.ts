@@ -32,9 +32,9 @@ export interface Database {
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-// Debug: log what we got
-console.log('[Supabase] URL configured:', !!supabaseUrl, supabaseUrl ? `(${supabaseUrl.length} chars)` : '');
-console.log('[Supabase] Key configured:', !!supabaseAnonKey, supabaseAnonKey ? `(${supabaseAnonKey.length} chars)` : '');
+// Debug: log what we got (show actual values to debug)
+console.log('[Supabase] URL:', supabaseUrl);
+console.log('[Supabase] Key (first 20 chars):', supabaseAnonKey?.substring(0, 20));
 
 // Check if Supabase is configured
 export function isSupabaseConfigured(): boolean {
