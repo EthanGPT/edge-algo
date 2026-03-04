@@ -2,16 +2,30 @@
 indicator("Key Level Breakout System", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=300)
 
 var string G0 = "── Instrument Preset ─────────────────"
-presetMode = input.string("Auto", "Preset Mode", options=["Auto", "MNQ", "M2K", "MES", "MGC", "Manual"], group=G0)
+presetMode = input.string("Auto", "Preset Mode", options=["Auto", "MNQ", "M2K", "MES", "MGC", "ZN", "ZB", "6E", "6J", "Manual"], group=G0)
 
 _ticker     = str.upper(syminfo.ticker)
-_autoPreset = str.contains(_ticker, "MNQ") ? "MNQ" : str.contains(_ticker, "M2K") ? "M2K" : str.contains(_ticker, "MES") ? "MES" : str.contains(_ticker, "MGC") ? "MGC" : "Manual"
+_autoPreset = str.contains(_ticker, "MNQ") ? "MNQ" :
+              str.contains(_ticker, "M2K") ? "M2K" :
+              str.contains(_ticker, "MES") ? "MES" :
+              str.contains(_ticker, "MGC") ? "MGC" :
+              str.contains(_ticker, "ZN")  ? "ZN"  :
+              str.contains(_ticker, "ZB")  ? "ZB"  :
+              str.contains(_ticker, "6E")  ? "6E"  :
+              str.contains(_ticker, "6J")  ? "6J"  : "Manual"
 _preset     = presetMode == "Auto" ? _autoPreset : presetMode
 
-_presetTP = _preset == "MNQ" ? 35.0 : _preset == "M2K" ? 10.0 : _preset == "MES" ? 25.0 : _preset == "MGC" ? 20.0 : 35.0
-_presetSL = _preset == "MNQ" ? 50.0 : _preset == "M2K" ? 10.0 : _preset == "MES" ? 25.0 : _preset == "MGC" ? 25.0 : 50.0
-_presetPV = _preset == "MNQ" ?  2.0 : _preset == "M2K" ?  5.0 : _preset == "MES" ?  5.0 : _preset == "MGC" ? 10.0 :  2.0
-_presetRZ = _preset == "M2K" ?  2.0 : _preset == "MGC" ?  3.0 : 5.0
+// ── OPTIMIZED PARAMETERS (OOS Validated) ──────────────────────────────────────
+// Micros: MNQ/MES/MGC in pts | Bonds: ZN/ZB in 32nds | Currencies: 6E/6J in pips
+_presetTP = _preset == "MNQ" ? 50.0 : _preset == "M2K" ? 10.0 : _preset == "MES" ? 25.0 : _preset == "MGC" ? 20.0 : _preset == "ZN" ? 0.20 : _preset == "ZB" ? 0.50 : _preset == "6E" ? 0.003 : _preset == "6J" ? 0.00004 : 50.0
+
+_presetSL = _preset == "MNQ" ? 50.0 : _preset == "M2K" ? 10.0 : _preset == "MES" ? 25.0 : _preset == "MGC" ? 25.0 : _preset == "ZN" ? 0.30 : _preset == "ZB" ? 0.50 : _preset == "6E" ? 0.0025 : _preset == "6J" ? 0.00007 : 50.0
+
+_presetPV = _preset == "MNQ" ? 2.0 : _preset == "M2K" ? 5.0 : _preset == "MES" ? 5.0 : _preset == "MGC" ? 10.0 : _preset == "ZN" ? 1000.0 : _preset == "ZB" ? 1000.0 : _preset == "6E" ? 125000.0 : _preset == "6J" ? 125000.0 : 2.0
+
+_presetRZ = _preset == "M2K" ? 2.0 : _preset == "MGC" ? 3.0 : _preset == "ZN" ? 0.03 : _preset == "ZB" ? 0.05 : _preset == "6E" ? 0.0005 : _preset == "6J" ? 0.00001 : 5.0
+
+_presetTrail = _preset == "ZN" ? 0.03 : _preset == "ZB" ? 0.05 : _preset == "6E" ? 0.0005 : _preset == "6J" ? 0.00001 : 5.0
 
 var string G1 = "── Manual Risk (only used in Manual mode) ──"
 manualTP  = input.float(35.0, "Take Profit (pts)", minval=1.0, step=1.0, group=G1)
@@ -24,7 +38,7 @@ tpPts      = _preset == "Manual" ? manualTP : _presetTP
 slPts      = _preset == "Manual" ? manualSL : _presetSL
 retestPts  = _preset == "Manual" ? manualRZ : _presetRZ
 pointValue = _preset == "Manual" ? manualPV : _presetPV
-trailPts   = 5.0
+trailPts   = _preset == "Manual" ? 5.0 : _presetTrail
 
 var string G_SESS = "── Session & Levels ──────────────────"
 tz         = input.string("America/New_York", "Timezone", group=G_SESS)
@@ -154,11 +168,15 @@ f_signal(lvl, isLong, lvlName) =>
 // TRADERSPOST WEBHOOK ALERT FUNCTION
 // ══════════════════════════════════════════════════════════════════════════════
 f_sendAlert(isLong, lvlName, lvlPrice) =>
-    // Get the base ticker (MNQ, MES, MGC, etc.)
+    // Get the base ticker (MNQ, MES, MGC, ZN, ZB, 6E, 6J, etc.)
     baseTicker = str.contains(_ticker, "MNQ") ? "MNQ" :
                  str.contains(_ticker, "MES") ? "MES" :
                  str.contains(_ticker, "MGC") ? "MGC" :
-                 str.contains(_ticker, "M2K") ? "M2K" : _ticker
+                 str.contains(_ticker, "M2K") ? "M2K" :
+                 str.contains(_ticker, "ZN")  ? "ZN"  :
+                 str.contains(_ticker, "ZB")  ? "ZB"  :
+                 str.contains(_ticker, "6E")  ? "6E"  :
+                 str.contains(_ticker, "6J")  ? "6J"  : _ticker
 
     action = isLong ? "buy" : "sell"
 

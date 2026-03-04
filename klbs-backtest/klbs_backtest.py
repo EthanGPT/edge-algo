@@ -42,12 +42,12 @@ STARTING_CAPITAL = 100_000
 INSTRUMENTS = {
     'MNQ': {
         'file': 'data/MNQ_15m.csv',
-        'tp': 35,           # Target profit (pts) - triggers trail mode [OPTIMIZED]
-        'sl': 50,           # Initial stop loss (pts) [OPTIMIZED]
+        'tp': 50,           # [OPTIMIZED] Target profit (pts)
+        'sl': 50,           # [OPTIMIZED] Initial stop loss (pts)
         'rz': 5,            # Retest zone (pts)
         'pv': 2.0,          # Point value ($)
         'contracts': 4,     # Number of contracts
-        'trail': 5,         # Trail distance after TP (pts)
+        'trail': 5,         # [OPTIMIZED] Trail distance after TP (pts)
         'name': 'Micro Nasdaq'
     },
     'MES': {
@@ -57,7 +57,7 @@ INSTRUMENTS = {
         'rz': 5,
         'pv': 5.0,
         'contracts': 4,
-        'trail': 5,
+        'trail': 5,         # [OPTIMIZED]
         'name': 'Micro S&P 500'
     },
     'MGC': {
@@ -67,13 +67,69 @@ INSTRUMENTS = {
         'rz': 3,
         'pv': 10.0,
         'contracts': 2,
-        'trail': 5,
+        'trail': 5,         # [OPTIMIZED]
         'name': 'Micro Gold'
+    },
+    # ── Bonds (Less Volatile, Very Liquid) ──────────────────────────────
+    'ZN': {
+        'file': 'data/ZN_15m.csv',
+        'tp': 0.20,         # [OPTIMIZED] Target profit (pts)
+        'sl': 0.30,         # [OPTIMIZED] Initial stop loss (pts)
+        'rz': 0.03,         # Retest zone (~2 ticks)
+        'pv': 1000.0,       # Point value ($1000/point)
+        'contracts': 2,     # Number of contracts
+        'trail': 0.03,      # [OPTIMIZED] Trail distance after TP (pts)
+        'name': '10-Year Treasury'
+    },
+    'ZB': {
+        'file': 'data/ZB_15m.csv',
+        'tp': 0.50,         # [OPTIMIZED] Target profit (pts)
+        'sl': 0.50,         # [OPTIMIZED] Initial stop loss (pts)
+        'rz': 0.05,         # Retest zone (~2 ticks)
+        'pv': 1000.0,       # Point value ($1000/point)
+        'contracts': 2,     # Number of contracts
+        'trail': 0.05,      # [OPTIMIZED] Trail distance after TP (pts)
+        'name': '30-Year Treasury'
+    },
+    # ── Currencies (Moderate Volatility, Liquid) ────────────────────────
+    '6E': {
+        'file': 'data/6E_15m.csv',
+        'tp': 0.003,        # [OPTIMIZED] Target profit (pts)
+        'sl': 0.0025,       # [OPTIMIZED] Initial stop loss (pts)
+        'rz': 0.0005,       # Retest zone (~10 ticks)
+        'pv': 125000.0,     # Point value ($125,000/point)
+        'contracts': 1,     # Number of contracts
+        'trail': 0.0005,    # [OPTIMIZED] Trail distance after TP (pts)
+        'name': 'Euro FX'
+    },
+    '6J': {
+        'file': 'data/6J_15m.csv',
+        'tp': 0.00004,      # [OPTIMIZED] Target profit (pts)
+        'sl': 0.00007,      # [OPTIMIZED] Initial stop loss (pts)
+        'rz': 0.00001,      # Retest zone (~10 ticks)
+        'pv': 125000.0,     # Point value ($125,000/point)
+        'contracts': 1,     # Number of contracts
+        'trail': 0.00001,   # [OPTIMIZED] Trail distance after TP (pts)
+        'name': 'Japanese Yen'
     },
 }
 
 ET = pytz.timezone('America/New_York')
 DEBUG = False
+
+# ── Slippage Configuration ────────────────────────────────────────────────────
+# Slippage on stop exits (market orders) - limit order entries have no slippage
+# Values in points per instrument
+INCLUDE_SLIPPAGE = True  # Toggle to include/exclude slippage
+SLIPPAGE = {
+    'MNQ': 0.50,    # ~2 ticks ($1/contract)
+    'MES': 0.25,    # ~1 tick ($1.25/contract)
+    'MGC': 0.20,    # ~2 ticks ($2/contract)
+    'ZN':  0.015625, # 1 tick = 1/64 point ($15.63/contract)
+    'ZB':  0.03125,  # 1 tick = 1/32 point ($31.25/contract)
+    '6E':  0.00005,  # 0.5 pips ($6.25/contract)
+    '6J':  0.0000005, # ~0.5 pips
+}
 
 # ── Fees & Commissions ───────────────────────────────────────────────────────
 # Standard CME Micro futures costs (per contract, round-trip)
@@ -96,6 +152,32 @@ FEES = {
         'exchange': 0.22,
         'nfa': 0.01,
         'round_trip': 1.50,
+    },
+    # ── Bonds ───────────────────────────────────────────────────────────
+    'ZN': {
+        'commission': 0.85,     # Full-size futures higher commission
+        'exchange': 0.85,       # CBOT exchange fee per side
+        'nfa': 0.01,
+        'round_trip': 3.50,     # Total per contract (both sides)
+    },
+    'ZB': {
+        'commission': 0.85,
+        'exchange': 0.85,
+        'nfa': 0.01,
+        'round_trip': 3.50,
+    },
+    # ── Currencies ──────────────────────────────────────────────────────
+    '6E': {
+        'commission': 0.85,
+        'exchange': 0.85,
+        'nfa': 0.01,
+        'round_trip': 3.50,
+    },
+    '6J': {
+        'commission': 0.85,
+        'exchange': 0.85,
+        'nfa': 0.01,
+        'round_trip': 3.50,
     },
 }
 
@@ -145,10 +227,11 @@ def load_data(filepath):
     return df
 
 
-def run_backtest(symbol, cfg, include_fees=INCLUDE_FEES):
+def run_backtest(symbol, cfg, include_fees=INCLUDE_FEES, include_slippage=INCLUDE_SLIPPAGE):
     fees_str = "with fees" if include_fees else "no fees"
+    slip_str = "+slippage" if include_slippage else ""
     print(f"\n{'='*60}")
-    print(f"  {symbol} — {cfg['name']} [Trail Mode, {fees_str}]")
+    print(f"  {symbol} — {cfg['name']} [Trail Mode, {fees_str}{slip_str}]")
     print(f"{'='*60}")
 
     filepath = os.path.join(BASE_DIR, cfg['file'])
@@ -374,6 +457,7 @@ def run_backtest(symbol, cfg, include_fees=INCLUDE_FEES):
     contracts = cfg['contracts']
     trail_pts = cfg.get('trail', 5)
     fee_per_contract = FEES[symbol]['round_trip'] if include_fees else 0
+    slippage_pts = SLIPPAGE.get(symbol, 0) if include_slippage else 0
 
     results = []
     for idx, trade in trades_df.iterrows():
@@ -428,7 +512,8 @@ def run_backtest(symbol, cfg, include_fees=INCLUDE_FEES):
 
                 # Check if stopped out
                 if fl <= current_sl:
-                    exit_price = current_sl
+                    # Apply slippage on stop exit (market order gets worse fill)
+                    exit_price = current_sl - slippage_pts
                     exit_bar = fb['Datetime']
                     if exit_price > entry:
                         outcome = 'WIN'
@@ -458,7 +543,8 @@ def run_backtest(symbol, cfg, include_fees=INCLUDE_FEES):
 
                 # Check if stopped out
                 if fh >= current_sl:
-                    exit_price = current_sl
+                    # Apply slippage on stop exit (market order gets worse fill)
+                    exit_price = current_sl + slippage_pts
                     exit_bar = fb['Datetime']
                     if exit_price < entry:
                         outcome = 'WIN'
@@ -724,6 +810,19 @@ def run_backtest(symbol, cfg, include_fees=INCLUDE_FEES):
         'disarm_events': pd.DataFrame(disarm_events) if disarm_events else None,
     }
 
+
+def fmt_pts(v):
+    """Format points with appropriate decimal places based on magnitude."""
+    if v == 0:
+        return "0"
+    elif abs(v) >= 10:
+        return f"{v:.1f}"
+    elif abs(v) >= 1:
+        return f"{v:.2f}"
+    elif abs(v) >= 0.01:
+        return f"{v:.3f}"
+    else:
+        return f"{v:.5f}"
 
 def fmt_currency(v):
     """Format currency with M for millions, K for thousands."""
@@ -1231,15 +1330,15 @@ def build_report(all_results):
         trail_pct = s.get('trails_triggered', 0) / s['total'] * 100 if s['total'] > 0 else 0
         stats_cards += f"""
         <div class="stats-card">
-          <h3>{r['symbol']} — {s.get('contracts', 1)} Contracts | TP {r['cfg'].get('tp', 0)}pts SL {r['cfg'].get('sl', 0)}pts</h3>
+          <h3>{r['symbol']} — {s.get('contracts', 1)} Contracts | TP {fmt_pts(r['cfg'].get('tp', 0))}pts SL {fmt_pts(r['cfg'].get('sl', 0))}pts</h3>
           <div class="stats-grid">
             <div class="stat-item">
               <span class="stat-label">Avg Win</span>
-              <span class="stat-value green">{s.get('avg_win_pts', 0):.1f} pts (${s['avg_win']:,.0f})</span>
+              <span class="stat-value green">{fmt_pts(s.get('avg_win_pts', 0))} pts (${s['avg_win']:,.0f})</span>
             </div>
             <div class="stat-item">
               <span class="stat-label">Avg Loss</span>
-              <span class="stat-value red">{s.get('avg_loss_pts', 0):.1f} pts (${s['avg_loss']:,.0f})</span>
+              <span class="stat-value red">{fmt_pts(s.get('avg_loss_pts', 0))} pts (${s['avg_loss']:,.0f})</span>
             </div>
             <div class="stat-item">
               <span class="stat-label">Trails Triggered</span>
@@ -1501,7 +1600,7 @@ def run_full_optimization():
     print("  Testing TP, SL, and Trail combinations")
     print("="*60)
 
-    # Define parameter ranges - REDUCED for speed (18 + 12 + 8 = 38 combos total)
+    # Define parameter ranges - REDUCED for speed
     param_ranges = {
         'MNQ': {
             'tp': [35, 40, 50],
@@ -1517,6 +1616,28 @@ def run_full_optimization():
             'tp': [20, 25],
             'sl': [20, 25],
             'trail': [5, 8],
+        },
+        # ── Bonds ───────────────────────────────────────────────────────
+        'ZN': {
+            'tp': [0.15, 0.20, 0.25, 0.30],
+            'sl': [0.20, 0.25, 0.30],
+            'trail': [0.03, 0.05, 0.08],
+        },
+        'ZB': {
+            'tp': [0.20, 0.30, 0.40, 0.50],
+            'sl': [0.30, 0.40, 0.50],
+            'trail': [0.05, 0.08, 0.10],
+        },
+        # ── Currencies ──────────────────────────────────────────────────
+        '6E': {
+            'tp': [0.0020, 0.0025, 0.0030, 0.0035],
+            'sl': [0.0025, 0.0030, 0.0035, 0.0040],
+            'trail': [0.0005, 0.0008, 0.0010],
+        },
+        '6J': {
+            'tp': [0.00004, 0.00005, 0.00006],
+            'sl': [0.00005, 0.00006, 0.00007],
+            'trail': [0.00001, 0.00002],
         },
     }
 
@@ -2166,7 +2287,7 @@ def build_oos_report(is_results, oos_results, split_year):
 
     # Build HTML report
     rows_html = ''
-    symbols = ['MNQ', 'MES', 'MGC']
+    symbols = list(INSTRUMENTS.keys())
     for i, sym in enumerate(symbols):
         is_r = is_results[i]
         oos_r = oos_results[i]
