@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus, Pencil, Trash2, ExternalLink, Star } from "lucide-react";
-import { useData } from "@/context/DataContext";
+import { useJournal } from "@/context/JournalContext";
 import { PropFirm } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 const PropFirms = () => {
-  const { propFirms, addPropFirm, updatePropFirm, deletePropFirm } = useData();
+  const { propFirms, addPropFirm, updatePropFirm, deletePropFirm } = useJournal();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingFirm, setEditingFirm] = useState<PropFirm | null>(null);
 

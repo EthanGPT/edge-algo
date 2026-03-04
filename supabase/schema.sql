@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS bot_accounts (
   prop_firm TEXT NOT NULL,
   account_size DECIMAL(12,2) NOT NULL,
   contract_size INTEGER NOT NULL DEFAULT 1,
-  status TEXT NOT NULL DEFAULT 'evaluation' CHECK (status IN ('evaluation', 'funded', 'breached', 'passed', 'withdrawn')),
+  status TEXT NOT NULL DEFAULT 'evaluation' CHECK (status IN ('demo', 'evaluation', 'funded', 'breached', 'passed', 'withdrawn')),
   -- Drawdown rules
   max_drawdown DECIMAL(12,2) NOT NULL,
   daily_drawdown DECIMAL(12,2) NOT NULL,

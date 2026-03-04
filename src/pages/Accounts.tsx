@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { Plus, Pencil, Trash2, CheckCircle2, XCircle, Clock, Wallet, AlertTriangle, LogOut, Eye, EyeOff, Monitor } from "lucide-react";
-import { useData } from "@/context/DataContext";
+import { useJournal } from "@/context/JournalContext";
 import { ACCOUNT_SIZES, Account, AccountType, EvaluationStatus, FundedStatus, DemoStatus } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,7 +43,7 @@ function getStatusConfig(account: Account) {
 }
 
 const Accounts = () => {
-  const { accounts, addAccount, updateAccount, deleteAccount } = useData();
+  const { accounts, addAccount, updateAccount, deleteAccount } = useJournal();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [defaultType, setDefaultType] = useState<AccountType>('evaluation');
@@ -364,7 +364,7 @@ interface AccountFormProps {
 }
 
 function AccountForm({ onClose, onSave, initialData, defaultType = 'evaluation' }: AccountFormProps) {
-  const { propFirms } = useData();
+  const { propFirms } = useJournal();
   const getDefaultStatus = (type: AccountType) => {
     if (type === 'funded') return 'active';
     if (type === 'demo') return 'active';

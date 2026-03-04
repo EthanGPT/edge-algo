@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Pencil, Trash2, Bot, Play, Pause, Archive, ChevronRight, AlertCircle, Sparkles } from "lucide-react";
+import { Plus, Pencil, Trash2, Bot, Play, Pause, Archive, ChevronRight, AlertCircle } from "lucide-react";
 import { useBots } from "@/context/BotContext";
 import { useAuth } from "@/context/AuthContext";
-import type { Bot as BotType, BotStatus, BotFormData } from "@/types/bots";
+import type { Bot as BotType, BotStatus, BotFormData, BotBacktestData } from "@/types/bots";
 import { BOT_INSTRUMENTS } from "@/types/bots";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +26,7 @@ const statusConfig = {
 
 const Bots = () => {
   const { user, isConfigured } = useAuth();
-  const { bots, botAccounts, botTrades, addBot, updateBot, deleteBot, loading, error, loadKLBSDemo } = useBots();
+  const { bots, botAccounts, botTrades, backtestData, addBot, updateBot, deleteBot, addBacktestData, loading, error } = useBots();
   const navigate = useNavigate();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBot, setEditingBot] = useState<BotType | null>(null);
@@ -73,14 +73,41 @@ const Bots = () => {
     return { accounts: accounts.length, trades: trades.length, totalPnl, winRate };
   };
 
-  const handleSave = async (data: BotFormData) => {
+  const handleSave = async (data: BotFormData, backtestInput?: { period_start: string; period_end: string; total_trades: number; win_count: number; loss_count: number; net_pnl: number; max_drawdown: number; avg_winner: number; avg_loser: number; contract_size: number }) => {
     if (editingBot) {
       await updateBot(editingBot.id, data);
     } else {
-      await addBot(data);
+      const newBot = await addBot(data);
+      // Add backtest data if provided
+      if (newBot && backtestInput && backtestInput.total_trades > 0) {
+        await addBacktestData({
+          bot_id: newBot.id,
+          period_start: backtestInput.period_start,
+          period_end: backtestInput.period_end,
+          total_trades: backtestInput.total_trades,
+          win_count: backtestInput.win_count,
+          loss_count: backtestInput.loss_count,
+          gross_pnl: backtestInput.net_pnl,
+          net_pnl: backtestInput.net_pnl,
+          max_drawdown: backtestInput.max_drawdown,
+          max_daily_drawdown: backtestInput.max_drawdown * 0.4, // Estimate
+          avg_winner: backtestInput.avg_winner,
+          avg_loser: backtestInput.avg_loser,
+          largest_winner: backtestInput.avg_winner * 3, // Estimate
+          largest_loser: backtestInput.avg_loser * 2, // Estimate
+          avg_rr_ratio: backtestInput.avg_loser > 0 ? backtestInput.avg_winner / backtestInput.avg_loser : 1,
+          contract_size: backtestInput.contract_size,
+          notes: '',
+        });
+      }
     }
     setIsDialogOpen(false);
     setEditingBot(null);
+  };
+
+  // Get backtest for editing bot
+  const getExistingBacktest = (botId: string) => {
+    return backtestData.find(b => b.bot_id === botId) || null;
   };
 
   const renderBotCard = (bot: BotType) => {
@@ -207,6 +234,7 @@ const Bots = () => {
             onClose={() => { setIsDialogOpen(false); setEditingBot(null); }}
             onSave={handleSave}
             initialData={editingBot}
+            existingBacktest={editingBot ? getExistingBacktest(editingBot.id) : null}
           />
         </DialogContent>
       </Dialog>
@@ -266,34 +294,41 @@ const Bots = () => {
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Bot className="h-16 w-16 text-muted-foreground/50 mb-4" />
           <h3 className="text-lg font-medium mb-2">No bots yet</h3>
-          <p className="text-muted-foreground mb-4">Create your first trading bot or load the KLBS demo with real backtest data</p>
-          <div className="flex gap-3">
-            <Button onClick={loadKLBSDemo} variant="outline" className="border-accent text-accent hover:bg-accent/10">
-              <Sparkles className="mr-2 h-4 w-4" />
-              Load KLBS Demo
-            </Button>
-            <Button onClick={() => setIsDialogOpen(true)} className="bg-accent text-accent-foreground hover:bg-accent/90">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Your First Bot
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground mt-4 max-w-md">
-            KLBS Demo includes 3 bots (MNQ, MES, MGC) with $1.12M combined backtest P&L from Jan 2018 - Aug 2024
+          <p className="text-muted-foreground mb-4 max-w-md">
+            Create your first trading bot. You can include backtest data when creating the bot.
           </p>
+          <Button onClick={() => setIsDialogOpen(true)} className="bg-accent text-accent-foreground hover:bg-accent/90">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Your First Bot
+          </Button>
         </div>
       )}
     </div>
   );
 };
 
-// Bot Form Component
+// Bot Form Component with Backtest Data
 interface BotFormProps {
   onClose: () => void;
-  onSave: (data: BotFormData) => void;
+  onSave: (data: BotFormData, backtestData?: BacktestInput) => void;
   initialData?: BotType | null;
+  existingBacktest?: BotBacktestData | null;
 }
 
-function BotForm({ onClose, onSave, initialData }: BotFormProps) {
+interface BacktestInput {
+  period_start: string;
+  period_end: string;
+  total_trades: number;
+  win_count: number;
+  loss_count: number;
+  net_pnl: number;
+  max_drawdown: number;
+  avg_winner: number;
+  avg_loser: number;
+  contract_size: number;
+}
+
+function BotForm({ onClose, onSave, initialData, existingBacktest }: BotFormProps) {
   const [formData, setFormData] = useState<BotFormData>(
     initialData ? {
       name: initialData.name,
@@ -314,13 +349,49 @@ function BotForm({ onClose, onSave, initialData }: BotFormProps) {
     }
   );
 
+  const [includeBacktest, setIncludeBacktest] = useState(!!existingBacktest);
+  const [backtest, setBacktest] = useState<BacktestInput>(
+    existingBacktest ? {
+      period_start: existingBacktest.period_start,
+      period_end: existingBacktest.period_end,
+      total_trades: existingBacktest.total_trades,
+      win_count: existingBacktest.win_count,
+      loss_count: existingBacktest.loss_count,
+      net_pnl: existingBacktest.net_pnl,
+      max_drawdown: existingBacktest.max_drawdown,
+      avg_winner: existingBacktest.avg_winner,
+      avg_loser: existingBacktest.avg_loser,
+      contract_size: existingBacktest.contract_size,
+    } : {
+      period_start: '2018-01-01',
+      period_end: '2024-08-31',
+      total_trades: 0,
+      win_count: 0,
+      loss_count: 0,
+      net_pnl: 0,
+      max_drawdown: 0,
+      avg_winner: 0,
+      avg_loser: 0,
+      contract_size: initialData?.default_contracts || 1,
+    }
+  );
+
+  // Sync backtest contract_size when default_contracts changes
+  const handleDefaultContractsChange = (contracts: number) => {
+    setFormData({ ...formData, default_contracts: contracts });
+    // Also update backtest contract_size if it matches the old value
+    if (backtest.contract_size === formData.default_contracts) {
+      setBacktest({ ...backtest, contract_size: contracts });
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    onSave(formData, includeBacktest ? backtest : undefined);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="name">Bot Name</Label>
@@ -363,7 +434,7 @@ function BotForm({ onClose, onSave, initialData }: BotFormProps) {
             type="number"
             min="1"
             value={formData.default_contracts}
-            onChange={(e) => setFormData({ ...formData, default_contracts: parseInt(e.target.value) || 1 })}
+            onChange={(e) => handleDefaultContractsChange(parseInt(e.target.value) || 1)}
             required
           />
         </div>
@@ -398,11 +469,124 @@ function BotForm({ onClose, onSave, initialData }: BotFormProps) {
           value={formData.strategy_notes || ''}
           onChange={(e) => setFormData({ ...formData, strategy_notes: e.target.value })}
           placeholder="Entry/exit rules, key levels, parameters..."
-          rows={4}
+          rows={3}
         />
       </div>
 
-      <div className="flex justify-end gap-3">
+      {/* Backtest Data Section */}
+      <div className="border-t pt-4 mt-4">
+        <div className="flex items-center gap-2 mb-4">
+          <input
+            type="checkbox"
+            id="includeBacktest"
+            checked={includeBacktest}
+            onChange={(e) => setIncludeBacktest(e.target.checked)}
+            className="rounded border-input"
+          />
+          <Label htmlFor="includeBacktest" className="text-sm font-medium cursor-pointer">
+            Include Backtest Data
+          </Label>
+        </div>
+
+        {includeBacktest && (
+          <div className="space-y-4 p-4 rounded-lg bg-secondary/30">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Period Start</Label>
+                <Input
+                  type="date"
+                  value={backtest.period_start}
+                  onChange={(e) => setBacktest({ ...backtest, period_start: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Period End</Label>
+                <Input
+                  type="date"
+                  value={backtest.period_end}
+                  onChange={(e) => setBacktest({ ...backtest, period_end: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Total Trades</Label>
+                <Input
+                  type="number"
+                  value={backtest.total_trades || ''}
+                  onChange={(e) => setBacktest({ ...backtest, total_trades: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Wins</Label>
+                <Input
+                  type="number"
+                  value={backtest.win_count || ''}
+                  onChange={(e) => setBacktest({ ...backtest, win_count: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Losses</Label>
+                <Input
+                  type="number"
+                  value={backtest.loss_count || ''}
+                  onChange={(e) => setBacktest({ ...backtest, loss_count: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Net P&L ($)</Label>
+                <Input
+                  type="number"
+                  value={backtest.net_pnl || ''}
+                  onChange={(e) => setBacktest({ ...backtest, net_pnl: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Max Drawdown ($)</Label>
+                <Input
+                  type="number"
+                  value={backtest.max_drawdown || ''}
+                  onChange={(e) => setBacktest({ ...backtest, max_drawdown: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Avg Winner ($)</Label>
+                <Input
+                  type="number"
+                  value={backtest.avg_winner || ''}
+                  onChange={(e) => setBacktest({ ...backtest, avg_winner: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Avg Loser ($)</Label>
+                <Input
+                  type="number"
+                  value={backtest.avg_loser || ''}
+                  onChange={(e) => setBacktest({ ...backtest, avg_loser: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Contract Size</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={backtest.contract_size}
+                  onChange={(e) => setBacktest({ ...backtest, contract_size: parseInt(e.target.value) || 1 })}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-3 pt-2">
         <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
         <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90">
           {initialData ? 'Update' : 'Create'} Bot

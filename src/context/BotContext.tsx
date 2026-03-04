@@ -317,11 +317,30 @@ export function BotProvider({ children }: { children: ReactNode }) {
     }
 
     setBotTrades(prev => [data, ...prev]);
+
+    // Update account balance if trade is closed and has an account
+    if (trade.status === 'closed' && trade.bot_account_id && trade.pnl) {
+      const account = botAccounts.find(a => a.id === trade.bot_account_id);
+      if (account) {
+        const newBalance = account.current_balance + trade.pnl;
+        const newHWM = Math.max(account.high_water_mark, newBalance);
+        await supabase
+          .from('bot_accounts')
+          .update({ current_balance: newBalance, high_water_mark: newHWM })
+          .eq('id', account.id);
+        setBotAccounts(prev => prev.map(a =>
+          a.id === account.id ? { ...a, current_balance: newBalance, high_water_mark: newHWM } : a
+        ));
+      }
+    }
+
     return data;
-  }, []);
+  }, [botAccounts]);
 
   const updateBotTrade = useCallback(async (id: string, updates: Partial<BotTradeFormData>) => {
     if (!supabase) return;
+
+    const existingTrade = botTrades.find(t => t.id === id);
 
     const { error } = await supabase
       .from('bot_trades')
@@ -334,10 +353,36 @@ export function BotProvider({ children }: { children: ReactNode }) {
     }
 
     setBotTrades(prev => prev.map(t => t.id === id ? { ...t, ...updates } as BotTrade : t));
-  }, []);
+
+    // Handle balance changes on account
+    if (existingTrade?.bot_account_id) {
+      const account = botAccounts.find(a => a.id === existingTrade.bot_account_id);
+      if (account) {
+        const oldPnl = existingTrade.status === 'closed' ? (existingTrade.pnl || 0) : 0;
+        const newStatus = updates.status ?? existingTrade.status;
+        const newTradePnl = updates.pnl ?? existingTrade.pnl ?? 0;
+        const newPnlContribution = newStatus === 'closed' ? newTradePnl : 0;
+
+        if (oldPnl !== newPnlContribution) {
+          const pnlDiff = newPnlContribution - oldPnl;
+          const newBalance = account.current_balance + pnlDiff;
+          const newHWM = Math.max(account.high_water_mark, newBalance);
+          await supabase
+            .from('bot_accounts')
+            .update({ current_balance: newBalance, high_water_mark: newHWM })
+            .eq('id', account.id);
+          setBotAccounts(prev => prev.map(a =>
+            a.id === account.id ? { ...a, current_balance: newBalance, high_water_mark: newHWM } : a
+          ));
+        }
+      }
+    }
+  }, [botAccounts, botTrades]);
 
   const deleteBotTrade = useCallback(async (id: string) => {
     if (!supabase) return;
+
+    const existingTrade = botTrades.find(t => t.id === id);
 
     const { error } = await supabase
       .from('bot_trades')
@@ -350,7 +395,22 @@ export function BotProvider({ children }: { children: ReactNode }) {
     }
 
     setBotTrades(prev => prev.filter(t => t.id !== id));
-  }, []);
+
+    // Subtract P&L from account if trade was closed
+    if (existingTrade?.bot_account_id && existingTrade.status === 'closed' && existingTrade.pnl) {
+      const account = botAccounts.find(a => a.id === existingTrade.bot_account_id);
+      if (account) {
+        const newBalance = account.current_balance - existingTrade.pnl;
+        await supabase
+          .from('bot_accounts')
+          .update({ current_balance: newBalance })
+          .eq('id', account.id);
+        setBotAccounts(prev => prev.map(a =>
+          a.id === account.id ? { ...a, current_balance: newBalance } : a
+        ));
+      }
+    }
+  }, [botAccounts, botTrades]);
 
   // ── Backtest Data CRUD ────────────────────────────────────────
 
@@ -373,20 +433,29 @@ export function BotProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateBacktestData = useCallback(async (id: string, updates: Partial<BotBacktestFormData>) => {
-    if (!supabase) return;
+    if (!supabase) {
+      console.error('updateBacktestData: supabase not available');
+      return;
+    }
 
-    const { error } = await supabase
+    console.log('updateBacktestData:', id, updates);
+
+    const { data, error } = await supabase
       .from('bot_backtest_data')
       .update(updates)
-      .eq('id', id);
+      .eq('id', id)
+      .select()
+      .single();
 
     if (error) {
+      console.error('updateBacktestData error:', error);
       setError(error.message);
       return;
     }
 
+    console.log('updateBacktestData success:', data);
     setBacktestData(prev => prev.map(d => d.id === id ? { ...d, ...updates } as BotBacktestData : d));
-  }, []);
+  }, [supabase]);
 
   const deleteBacktestData = useCallback(async (id: string) => {
     if (!supabase) return;
@@ -418,33 +487,40 @@ export function BotProvider({ children }: { children: ReactNode }) {
 
       for (const instrument of instruments) {
         // Check if bot already exists
-        const existingBot = bots.find(b => b.name === 'KLBS Bot' && b.instrument === instrument);
-        if (existingBot) continue;
+        let existingBot = bots.find(b => b.name === 'KLBS Bot' && b.instrument === instrument);
+        let botId = existingBot?.id;
 
-        // Create bot
-        const { data: bot, error: botError } = await supabase
-          .from('bots')
-          .insert({
-            created_by: user.id,
-            name: 'KLBS Bot',
-            version: 'v1.0',
-            instrument,
-            default_contracts: instrument === 'MNQ' ? 2 : instrument === 'MES' ? 4 : 1,
-            description: `Key Level Breakout System for ${instrument}. Retest entries on PDH/PDL/PMH/PML/LPH/LPL.`,
-            strategy_notes: `Sessions: London 03:00-08:00, NY 09:30-16:00 ET\nEntry: Retest zone (0.15-0.35 of level distance)\nExit: Fixed TP 50pts, SL 25pts (2:1 R:R)\nNo trades during Dead Zone 08:00-09:30`,
-            status: 'active',
-          })
-          .select()
-          .single();
+        if (!existingBot) {
+          // Create bot
+          const { data: bot, error: botError } = await supabase
+            .from('bots')
+            .insert({
+              created_by: user.id,
+              name: 'KLBS Bot',
+              version: 'v1.0',
+              instrument,
+              default_contracts: instrument === 'MNQ' ? 2 : instrument === 'MES' ? 4 : 1,
+              description: `Key Level Breakout System for ${instrument}. Retest entries on PDH/PDL/PMH/PML/LPH/LPL.`,
+              strategy_notes: `Sessions: London 03:00-08:00, NY 09:30-16:00 ET\nEntry: Retest zone (0.15-0.35 of level distance)\nExit: Fixed TP 50pts, SL 25pts (2:1 R:R)\nNo trades during Dead Zone 08:00-09:30`,
+              status: 'active',
+            })
+            .select()
+            .single();
 
-        if (botError) throw botError;
+          if (botError) throw botError;
+          botId = bot.id;
+        }
+
+        // Check if backtest data exists for this bot
+        const existingBacktest = backtestData.find(bt => bt.bot_id === botId);
+        if (existingBacktest) continue;
 
         // Add backtest data for this bot
         const btData = KLBS_BACKTEST_DATA[instrument];
         const { error: btError } = await supabase
           .from('bot_backtest_data')
           .insert({
-            bot_id: bot.id,
+            bot_id: botId,
             period_start: '2018-01-01',
             period_end: '2024-08-31',
             total_trades: btData.total_trades,
@@ -473,7 +549,7 @@ export function BotProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user, bots, fetchData]);
+  }, [user, bots, backtestData, fetchData]);
 
   // ── Helpers ───────────────────────────────────────────────────
 

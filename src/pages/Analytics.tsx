@@ -43,7 +43,7 @@ import {
   ArrowDownRight,
   Calendar,
 } from "lucide-react";
-import { useData } from "@/context/DataContext";
+import { useJournal } from "@/context/JournalContext";
 import { Trade } from "@/types";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -69,7 +69,7 @@ const COLORS = {
 const PIE_COLORS = ["#10b981", "#ef4444", "#6b7280", "#3b82f6", "#f59e0b", "#8b5cf6", "#ec4899"];
 
 export default function Analytics() {
-  const { trades, tradingSetups, accounts } = useData();
+  const { trades, tradingSetups, accounts } = useJournal();
   const [dateRange, setDateRange] = useState<DateRange>("all");
 
   // Filter trades by date range

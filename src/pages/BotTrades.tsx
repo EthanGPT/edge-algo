@@ -10,7 +10,6 @@ import {
   Download,
   Upload,
   Bot,
-  Sparkles,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useBots } from "@/context/BotContext";
@@ -58,7 +57,6 @@ const BotTrades = () => {
     updateBotTrade,
     deleteBotTrade,
     loading,
-    loadKLBSDemo,
   } = useBots();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -181,20 +179,14 @@ const BotTrades = () => {
         <Bot className="h-16 w-16 text-muted-foreground/30 mb-4" />
         <h2 className="text-xl font-semibold mb-2">No Bots Configured</h2>
         <p className="text-muted-foreground mb-6 max-w-md">
-          You need to create a bot before you can track trades. Load the KLBS demo or create your first bot.
+          Create a bot first before you can track trades.
         </p>
-        <div className="flex gap-3">
-          <Button onClick={loadKLBSDemo} variant="outline" className="border-accent text-accent hover:bg-accent/10">
-            <Sparkles className="mr-2 h-4 w-4" />
-            Load KLBS Demo
+        <Link to="/bots">
+          <Button className="bg-accent text-accent-foreground hover:bg-accent/90">
+            <Plus className="mr-2 h-4 w-4" />
+            Create a Bot
           </Button>
-          <Link to="/bots">
-            <Button className="bg-accent text-accent-foreground hover:bg-accent/90">
-              <Plus className="mr-2 h-4 w-4" />
-              Go to Bots
-            </Button>
-          </Link>
-        </div>
+        </Link>
       </div>
     );
   }
@@ -555,14 +547,14 @@ function TradeForm({ bots, accounts, initialData, defaultBotId, onSave, onClose 
         <div className="space-y-1">
           <Label>Account (Optional)</Label>
           <Select
-            value={formData.bot_account_id || ""}
-            onValueChange={(v) => setFormData({ ...formData, bot_account_id: v || undefined })}
+            value={formData.bot_account_id || "none"}
+            onValueChange={(v) => setFormData({ ...formData, bot_account_id: v === "none" ? undefined : v })}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select account" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">No specific account</SelectItem>
+              <SelectItem value="none">No specific account</SelectItem>
               {botAccounts.map((a) => (
                 <SelectItem key={a.id} value={a.id}>
                   {a.account_name}
@@ -878,12 +870,12 @@ function ImportForm({ bots, accounts, onImport, onClose }: ImportFormProps) {
         </div>
         <div className="space-y-1">
           <Label>Account (Optional)</Label>
-          <Select value={accountId} onValueChange={setAccountId}>
+          <Select value={accountId || "none"} onValueChange={(v) => setAccountId(v === "none" ? "" : v)}>
             <SelectTrigger>
               <SelectValue placeholder="No specific account" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">No specific account</SelectItem>
+              <SelectItem value="none">No specific account</SelectItem>
               {botAccounts.map((a) => (
                 <SelectItem key={a.id} value={a.id}>
                   {a.account_name}

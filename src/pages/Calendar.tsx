@@ -25,7 +25,7 @@ import {
   CrosshairIcon,
   Camera,
 } from "lucide-react";
-import { useData } from "@/context/DataContext";
+import { useJournal } from "@/context/JournalContext";
 import { DailyEntry, Trade, INSTRUMENTS } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,7 +58,7 @@ const Calendar = () => {
     addTrade,
     updateTrade,
     deleteTrade,
-  } = useData();
+  } = useJournal();
   const tradingAccounts = useMemo(() => {
     const active = accounts.filter(
       (a) =>

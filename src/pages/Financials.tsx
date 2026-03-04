@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { Plus, Download, Pencil, Trash2 } from "lucide-react";
-import { useData } from "@/context/DataContext";
+import { useJournal } from "@/context/JournalContext";
 import { PAYOUT_METHODS, EXPENSE_CATEGORIES, Payout, Expense } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +23,7 @@ const Financials = () => {
   const {
     payouts, propFirms, addPayout, updatePayout, deletePayout,
     expenses, addExpense, updateExpense, deleteExpense,
-  } = useData();
+  } = useJournal();
 
   const [tab, setTab] = useState<"payouts" | "expenses">("payouts");
   const [isPayoutDialogOpen, setIsPayoutDialogOpen] = useState(false);

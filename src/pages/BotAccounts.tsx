@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { format } from "date-fns";
 import { Plus, Pencil, Trash2, CheckCircle2, XCircle, Clock, Wallet, AlertTriangle, LogOut, Eye, EyeOff } from "lucide-react";
 import { useBots } from "@/context/BotContext";
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { LoginForm } from "@/components/auth/LoginForm";
 
 const statusConfig = {
+  demo: { icon: Wallet, color: 'text-accent', bg: 'bg-accent/10', label: 'Demo' },
   evaluation: { icon: Clock, color: 'text-warning', bg: 'bg-warning/10', label: 'Evaluation' },
   funded: { icon: Wallet, color: 'text-success', bg: 'bg-success/10', label: 'Funded' },
   passed: { icon: CheckCircle2, color: 'text-success', bg: 'bg-success/10', label: 'Passed' },
@@ -67,6 +68,7 @@ const BotAccounts = () => {
     : botAccounts.filter(a => a.bot_id === filterBot);
 
   // Group accounts by status
+  const demos = filteredAccounts.filter(a => a.status === 'demo');
   const evaluations = filteredAccounts.filter(a => a.status === 'evaluation');
   const funded = filteredAccounts.filter(a => a.status === 'funded');
   const passed = filteredAccounts.filter(a => a.status === 'passed');
@@ -74,7 +76,7 @@ const BotAccounts = () => {
   const withdrawn = filteredAccounts.filter(a => a.status === 'withdrawn');
 
   // Active accounts
-  const activeAccounts = [...funded, ...evaluations, ...passed];
+  const activeAccounts = [...demos, ...funded, ...evaluations, ...passed];
   const inactiveAccounts = [...breached, ...withdrawn];
 
   // Calculate stats
@@ -255,7 +257,11 @@ const BotAccounts = () => {
       <section className="space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Active Accounts</h2>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button onClick={() => openAddDialog('demo')} variant="outline">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Demo
+            </Button>
             <Button onClick={() => openAddDialog('evaluation')} variant="outline">
               <Plus className="mr-2 h-4 w-4" />
               Add Evaluation
@@ -288,6 +294,14 @@ const BotAccounts = () => {
             <p className="text-sm text-muted-foreground">Pass Rate</p>
           </div>
         </div>
+
+        {/* Demo Accounts */}
+        {demos.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-lg font-medium text-accent">Demo Accounts</h3>
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{demos.map(renderAccountCard)}</div>
+          </div>
+        )}
 
         {/* Funded Accounts */}
         {funded.length > 0 && (
@@ -378,6 +392,24 @@ interface AccountFormProps {
 }
 
 function AccountForm({ bots, onClose, onSave, initialData, defaultStatus = 'evaluation' }: AccountFormProps) {
+  // Show error if no bots available - check BEFORE useState to avoid stale initialization
+  if (bots.length === 0) {
+    return (
+      <div className="text-center py-6">
+        <p className="text-muted-foreground mb-4">You need to create a bot first before adding accounts.</p>
+        <div className="flex justify-center gap-3">
+          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Link to="/bots">
+            <Button className="bg-accent text-accent-foreground hover:bg-accent/90">
+              <Plus className="mr-2 h-4 w-4" />
+              Create a Bot
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   const [formData, setFormData] = useState<BotAccountFormData>(
     initialData ? {
       bot_id: initialData.bot_id,
@@ -396,11 +428,11 @@ function AccountForm({ bots, onClose, onSave, initialData, defaultStatus = 'eval
       current_balance: initialData.current_balance,
       high_water_mark: initialData.high_water_mark,
     } : {
-      bot_id: bots[0]?.id || '',
+      bot_id: bots[0].id,
       account_name: '',
-      prop_firm: 'Apex Trader Funding',
+      prop_firm: defaultStatus === 'demo' ? 'Demo Account' : 'Apex Trader Funding',
       account_size: 50000,
-      contract_size: bots[0]?.default_contracts || 1,
+      contract_size: bots[0].default_contracts || 1,
       status: defaultStatus,
       max_drawdown: 2500,
       daily_drawdown: 1500,
@@ -412,6 +444,8 @@ function AccountForm({ bots, onClose, onSave, initialData, defaultStatus = 'eval
       high_water_mark: 50000,
     }
   );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleStatusChange = (status: BotAccountStatus) => {
     const updates: Partial<BotAccountFormData> = { status };
@@ -422,9 +456,27 @@ function AccountForm({ bots, onClose, onSave, initialData, defaultStatus = 'eval
     setFormData({ ...formData, ...updates });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    setError(null);
+
+    if (!formData.bot_id) {
+      setError("Please select a bot");
+      return;
+    }
+    if (!formData.account_name.trim()) {
+      setError("Please enter an account name");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onSave(formData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save account");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -446,6 +498,7 @@ function AccountForm({ bots, onClose, onSave, initialData, defaultStatus = 'eval
         <Select value={formData.status} onValueChange={(v) => handleStatusChange(v as BotAccountStatus)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
+            <SelectItem value="demo">Demo</SelectItem>
             <SelectItem value="evaluation">Evaluation</SelectItem>
             <SelectItem value="funded">Funded</SelectItem>
             <SelectItem value="passed">Passed</SelectItem>
@@ -558,10 +611,16 @@ function AccountForm({ bots, onClose, onSave, initialData, defaultStatus = 'eval
         </div>
       </div>
 
+      {error && (
+        <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+          {error}
+        </div>
+      )}
+
       <div className="flex justify-end gap-3">
-        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-        <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90">
-          {initialData ? 'Update' : 'Add'} Account
+        <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90" disabled={saving}>
+          {saving ? 'Saving...' : initialData ? 'Update' : 'Add'} Account
         </Button>
       </div>
     </form>

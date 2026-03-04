@@ -2,7 +2,7 @@
 // These types represent the collaborative bot tracking system stored in Supabase
 
 export type BotStatus = 'active' | 'paused' | 'retired';
-export type BotAccountStatus = 'evaluation' | 'funded' | 'breached' | 'passed' | 'withdrawn';
+export type BotAccountStatus = 'evaluation' | 'funded' | 'breached' | 'passed' | 'withdrawn' | 'demo';
 export type BotTradeStatus = 'open' | 'closed' | 'cancelled';
 export type BotTradeSource = 'webhook' | 'manual';
 export type TradeDirection = 'long' | 'short';
@@ -130,6 +130,7 @@ export const BOT_INSTRUMENTS = [
 
 // Common prop firms for bot accounts
 export const BOT_PROP_FIRMS = [
+  'Demo Account',
   'Apex Trader Funding',
   'Topstep',
   'Tradeify',

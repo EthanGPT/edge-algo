@@ -97,7 +97,7 @@ export interface Trade {
   setupId: string;
   accountId?: string; // account ID or 'split' for equal split across active funded accounts
   direction: TradeDirection;
-  entry: number;
+  entry?: number;
   exit?: number;
   stopLoss?: number;
   takeProfit?: number;

@@ -2,7 +2,7 @@ import { useRef, useMemo } from "react";
 import { format, parseISO, isToday } from "date-fns";
 import { Download, Camera, TrendingUp, TrendingDown, Wallet } from "lucide-react";
 import html2canvas from "html2canvas";
-import { useData } from "@/context/DataContext";
+import { useJournal } from "@/context/JournalContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -12,7 +12,7 @@ interface DailySnapshotProps {
 
 export function DailySnapshot({ onClose }: DailySnapshotProps) {
   const snapshotRef = useRef<HTMLDivElement>(null);
-  const { accounts, trades, propFirms } = useData();
+  const { accounts, trades, propFirms } = useJournal();
 
   const today = format(new Date(), "yyyy-MM-dd");
   const displayDate = format(new Date(), "EEEE, MMMM d, yyyy");

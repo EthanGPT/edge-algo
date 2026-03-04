@@ -10,7 +10,7 @@ import {
   Download,
   Upload,
 } from "lucide-react";
-import { useData } from "@/context/DataContext";
+import { useJournal } from "@/context/JournalContext";
 import { Trade, INSTRUMENTS } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 
 const Trades = () => {
   const { trades, tradingSetups, accounts, addTrade, updateTrade, deleteTrade } =
-    useData();
+    useJournal();
   const tradingAccounts = useMemo(() => {
     const active = accounts.filter(
       (a) =>
@@ -165,7 +165,7 @@ const Trades = () => {
       setupMap.get(t.setupId) ?? "",
       t.accountId === "split" ? "Split" : t.accountId ? accountMap.get(t.accountId) ?? "" : "",
       t.direction,
-      t.entry.toString(),
+      t.entry?.toString() ?? "",
       t.exit?.toString() ?? "",
       t.stopLoss?.toString() ?? "",
       t.contracts.toString(),
@@ -435,7 +435,7 @@ const Trades = () => {
                     )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {trade.entry.toLocaleString()}
+                    {trade.entry?.toLocaleString() ?? "-"}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {trade.exit?.toLocaleString() ?? "-"}

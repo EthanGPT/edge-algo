@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { format, parseISO, isWithinInterval, startOfYear, startOfMonth, subDays } from "date-fns";
 import { Download } from "lucide-react";
-import { useData } from "@/context/DataContext";
+import { useJournal } from "@/context/JournalContext";
 import { EXPENSE_CATEGORIES } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +35,7 @@ function getPresetDates(range: DateRange): { from: string; to: string } {
 }
 
 const Reports = () => {
-  const { payouts, expenses, propFirms } = useData();
+  const { payouts, expenses, propFirms } = useJournal();
   const [dateRange, setDateRange] = useState<DateRange>('all_time');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState(today());

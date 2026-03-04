@@ -49,3 +49,8 @@ export function getSupabase() {
   }
   return supabase;
 }
+
+// Expose to window for console imports
+if (typeof window !== 'undefined' && supabase) {
+  (window as any).supabase = supabase;
+}
