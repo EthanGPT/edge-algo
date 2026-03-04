@@ -39,17 +39,11 @@ import {
   History,
   Bot,
   Plus,
-  Target,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useBots } from "@/context/BotContext";
 import { useAuth } from "@/context/AuthContext";
-import { useBenchmarks } from "@/hooks/useBenchmarks";
-import {
-  RollingBenchmarkCard,
-  RiskMetricsCard,
-  PortfolioBenchmarkTable,
-} from "@/components/benchmarks";
+import { SimpleBenchmark } from "@/components/benchmarks";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -60,7 +54,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { LoginForm } from "@/components/auth/LoginForm";
 
@@ -79,16 +72,13 @@ const PIE_COLORS = ["#10b981", "#ef4444", "#6b7280", "#3b82f6", "#f59e0b", "#8b5
 
 export default function BotAnalytics() {
   const { user, isConfigured } = useAuth();
-  const { bots, botTrades, backtestTrades, backtestData, loading, updateBacktestData } = useBots();
-  const { calculateRiskMetrics, getRollingBenchmark, getPortfolioBenchmark } = useBenchmarks();
+  const { bots, botTrades, backtestTrades, backtestData, loading } = useBots();
   const [searchParams] = useSearchParams();
   const botIdParam = searchParams.get("bot");
 
   const [dateRange, setDateRange] = useState<DateRange>("all");
   const [selectedBot, setSelectedBot] = useState<string>(botIdParam || "all");
   const [instrumentFilter, setInstrumentFilter] = useState<InstrumentFilter>("all");
-  const [editingContracts, setEditingContracts] = useState<string | null>(null);
-  const [newContractSize, setNewContractSize] = useState<number>(1);
 
   if (!isConfigured) {
     return (
@@ -344,159 +334,11 @@ export default function BotAnalytics() {
     return Math.abs(Math.min(...drawdownData.map(d => d.drawdown), 0));
   }, [drawdownData]);
 
-  // Benchmark Data (backtest vs live)
-  const benchmarkData = useMemo(() => {
-    // Get backtest for selected bot or first available
-    const targetBotId = selectedBot !== "all" ? selectedBot : bots[0]?.id;
-    if (!targetBotId) return null;
-
-    const bt = backtestData.find(b => b.bot_id === targetBotId);
-    if (!bt) return null;
-
-    const bot = bots.find(b => b.id === targetBotId);
-    const liveContracts = bot?.default_contracts || 1;
-    const backtestContracts = bt.contract_size || 1;
-
-    // Scale factor: to convert backtest values to live contract size
-    // e.g., if backtest was 4 contracts and live is 2, scale = 2/4 = 0.5
-    const scaleToLive = liveContracts / backtestContracts;
-
-    // Live metrics for this bot only
-    const liveTrades = botTrades.filter(t => t.bot_id === targetBotId && t.status === 'closed');
-    const liveWins = liveTrades.filter(t => (t.pnl || 0) > 0);
-    const liveLosses = liveTrades.filter(t => (t.pnl || 0) < 0);
-    const liveNetPnl = liveTrades.reduce((s, t) => s + (t.pnl || 0), 0);
-    const liveWinRate = liveTrades.length > 0 ? (liveWins.length / liveTrades.length) * 100 : 0;
-    const liveAvgWin = liveWins.length > 0 ? liveWins.reduce((s, t) => s + (t.pnl || 0), 0) / liveWins.length : 0;
-    const liveAvgLoss = liveLosses.length > 0 ? Math.abs(liveLosses.reduce((s, t) => s + (t.pnl || 0), 0) / liveLosses.length) : 0;
-    const liveProfitFactor = liveAvgLoss > 0 ? (liveAvgWin * liveWins.length) / (liveAvgLoss * liveLosses.length) : liveWins.length > 0 ? 999 : 0;
-
-    // Calculate max drawdown from live trades
-    let liveMaxDD = 0;
-    let peak = 0;
-    let cumPnl = 0;
-    const sortedLive = [...liveTrades].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-    for (const trade of sortedLive) {
-      cumPnl += trade.pnl || 0;
-      if (cumPnl > peak) peak = cumPnl;
-      const dd = peak - cumPnl;
-      if (dd > liveMaxDD) liveMaxDD = dd;
-    }
-
-    // Scale BACKTEST values DOWN to match live contract size
-    // Backtest was 4 contracts, live is 2 contracts = multiply backtest by 0.5
-    const scaledBtNetPnl = bt.net_pnl * scaleToLive;
-    const scaledBtMaxDD = bt.max_drawdown * scaleToLive;
-    const scaledBtAvgWinner = bt.avg_winner * scaleToLive;
-    const scaledBtAvgLoser = bt.avg_loser * scaleToLive;
-    const scaledBtAvgPerTrade = scaledBtNetPnl / bt.total_trades;
-
-    // Win rate and profit factor don't change with scaling
-    const btWinRate = (bt.win_count / bt.total_trades) * 100;
-    const btProfitFactor = bt.avg_loser > 0 ? bt.avg_winner / bt.avg_loser : 0;
-
-    // Live avg per trade (already at live contract size)
-    const liveAvgPerTrade = liveTrades.length > 0 ? liveNetPnl / liveTrades.length : 0;
-
-    return {
-      bot,
-      backtest: bt,
-      liveContracts,
-      backtestContracts,
-      scaleToLive,
-      live: {
-        trades: liveTrades.length,
-        winRate: liveWinRate,
-        profitFactor: liveProfitFactor,
-        avgPerTrade: liveAvgPerTrade,
-        avgWin: liveAvgWin,
-        avgLoss: liveAvgLoss,
-        maxDrawdown: liveMaxDD,
-        netPnl: liveNetPnl,
-      },
-      // Scaled benchmark - backtest values adjusted to live contract size
-      scaledBenchmark: {
-        trades: bt.total_trades,
-        winRate: btWinRate,
-        profitFactor: btProfitFactor,
-        avgPerTrade: scaledBtAvgPerTrade,
-        avgWin: scaledBtAvgWinner,
-        avgLoss: scaledBtAvgLoser,
-        maxDrawdown: scaledBtMaxDD,
-        netPnl: scaledBtNetPnl,
-      },
-      // Raw backtest values (original 4 contract data)
-      rawBacktest: {
-        trades: bt.total_trades,
-        winRate: btWinRate,
-        profitFactor: btProfitFactor,
-        avgPerTrade: bt.net_pnl / bt.total_trades,
-        avgWin: bt.avg_winner,
-        avgLoss: bt.avg_loser,
-        maxDrawdown: bt.max_drawdown,
-        netPnl: bt.net_pnl,
-      },
-    };
-  }, [selectedBot, bots, botTrades, backtestData]);
-
   // Win/Loss Distribution
   const resultDistribution = useMemo(() => [
     { name: "Wins", value: metrics.wins, color: COLORS.profit },
     { name: "Losses", value: metrics.losses, color: COLORS.loss },
   ].filter(d => d.value > 0), [metrics]);
-
-  // Advanced Benchmark: Rolling monthly comparison for selected bot
-  const rollingBenchmark = useMemo(() => {
-    if (selectedBot === "all" || backtestTrades.length === 0) return null;
-
-    const bot = bots.find(b => b.id === selectedBot);
-    if (!bot) return null;
-
-    const botLiveTrades = botTrades.filter(t => t.bot_id === selectedBot);
-    const botBacktestTrades = backtestTrades.filter(t => t.bot_id === selectedBot);
-
-    return getRollingBenchmark(
-      botLiveTrades,
-      botBacktestTrades,
-      bot.default_contracts,
-      1 // backtest was at 1 contract
-    );
-  }, [selectedBot, bots, botTrades, backtestTrades, getRollingBenchmark]);
-
-  // Advanced Benchmark: Live risk metrics for selected bot/all
-  const liveRiskMetrics = useMemo(() => {
-    const trades = selectedBot === "all"
-      ? botTrades.filter(t => t.status === 'closed')
-      : botTrades.filter(t => t.bot_id === selectedBot && t.status === 'closed');
-    return calculateRiskMetrics(trades, 1);
-  }, [selectedBot, botTrades, calculateRiskMetrics]);
-
-  // Advanced Benchmark: Backtest risk metrics for comparison
-  const backtestRiskMetrics = useMemo(() => {
-    if (selectedBot === "all") return undefined;
-    const trades = backtestTrades.filter(t => t.bot_id === selectedBot);
-    if (trades.length === 0) return undefined;
-    const bot = bots.find(b => b.id === selectedBot);
-    // Scale to match live contract size
-    return calculateRiskMetrics(trades, bot?.default_contracts || 1);
-  }, [selectedBot, backtestTrades, bots, calculateRiskMetrics]);
-
-  // Advanced Benchmark: Portfolio-level comparison across all bots
-  const portfolioBenchmark = useMemo(() => {
-    if (bots.length === 0) return null;
-
-    const portfolioData = bots.map(bot => ({
-      id: bot.id,
-      name: `${bot.name} ${bot.version}`,
-      instrument: bot.instrument,
-      contracts: bot.default_contracts,
-      liveTrades: botTrades.filter(t => t.bot_id === bot.id),
-      backtestTrades: backtestTrades.filter(t => t.bot_id === bot.id),
-      backtestContracts: 1,
-    }));
-
-    return getPortfolioBenchmark(portfolioData);
-  }, [bots, botTrades, backtestTrades, getPortfolioBenchmark]);
 
   const formatCurrency = (val: number) =>
     `${val >= 0 ? "+" : ""}$${Math.abs(val).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -741,15 +583,11 @@ export default function BotAnalytics() {
 
       {/* Tabs */}
       <Tabs defaultValue="time" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="time">Time</TabsTrigger>
           <TabsTrigger value="direction">Direction</TabsTrigger>
           <TabsTrigger value="risk">Risk</TabsTrigger>
           <TabsTrigger value="benchmark">Benchmark</TabsTrigger>
-          <TabsTrigger value="advanced">
-            <Target className="h-3 w-3 mr-1" />
-            Advanced
-          </TabsTrigger>
         </TabsList>
 
         {/* TIME TAB */}
@@ -975,217 +813,13 @@ export default function BotAnalytics() {
 
         {/* BENCHMARK TAB */}
         <TabsContent value="benchmark" className="space-y-6">
-          <h3 className="text-lg font-medium flex items-center gap-2">
-            <History className="h-5 w-5" />
-            Live vs Backtest Benchmark
-          </h3>
-
-          {!benchmarkData ? (
-            <div className="text-center py-12 text-muted-foreground">
-              {selectedBot === "all" ? "Select a specific bot to view benchmark comparison." : "No backtest data available for this bot. Add backtest data to compare live performance."}
-            </div>
-          ) : (
-            <>
-              {/* Scaling Info */}
-              <div className="p-3 rounded-lg bg-muted/50 text-sm">
-                <p>
-                  <span className="font-medium">Backtest:</span> {benchmarkData.backtestContracts} contracts →
-                  <span className="font-medium"> Live:</span> {benchmarkData.liveContracts} contracts
-                  {benchmarkData.scaleToLive !== 1 && (
-                    <span className="text-muted-foreground"> (scaling backtest by {benchmarkData.scaleToLive.toFixed(2)}x)</span>
-                  )}
-                </p>
-              </div>
-
-              {/* Benchmark Comparison Cards - Using SCALED benchmark values */}
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <BenchmarkCard
-                  label="Win Rate"
-                  liveValue={benchmarkData.live.winRate}
-                  benchValue={benchmarkData.scaledBenchmark.winRate}
-                  format={(v) => `${v.toFixed(1)}%`}
-                  higherIsBetter
-                />
-                <BenchmarkCard
-                  label="Profit Factor"
-                  liveValue={benchmarkData.live.profitFactor}
-                  benchValue={benchmarkData.scaledBenchmark.profitFactor}
-                  format={(v) => v.toFixed(2)}
-                  higherIsBetter
-                />
-                <BenchmarkCard
-                  label={`Avg Per Trade (${benchmarkData.liveContracts}ct)`}
-                  liveValue={benchmarkData.live.avgPerTrade}
-                  benchValue={benchmarkData.scaledBenchmark.avgPerTrade}
-                  format={(v) => `$${v.toFixed(0)}`}
-                  higherIsBetter
-                />
-                <BenchmarkCard
-                  label={`Max Drawdown (${benchmarkData.liveContracts}ct)`}
-                  liveValue={benchmarkData.live.maxDrawdown}
-                  benchValue={benchmarkData.scaledBenchmark.maxDrawdown}
-                  format={(v) => `$${v.toFixed(0)}`}
-                  higherIsBetter={false}
-                />
-              </div>
-
-              {/* Scaled Benchmark Summary - Adjusted to live contract size */}
-              <div className="rounded-lg border border-border/50 bg-secondary/30 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    {editingContracts === benchmarkData.backtest.id ? (
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">Backtest was:</span>
-                        <Input
-                          type="number"
-                          min="1"
-                          className="w-16 h-8"
-                          value={newContractSize}
-                          onChange={(e) => setNewContractSize(parseInt(e.target.value) || 1)}
-                          autoFocus
-                        />
-                        <span className="font-medium">contracts</span>
-                        <Button
-                          size="sm"
-                          className="h-8 bg-accent text-accent-foreground"
-                          onClick={async () => {
-                            await updateBacktestData(benchmarkData.backtest.id, { contract_size: newContractSize });
-                            setEditingContracts(null);
-                          }}
-                        >
-                          Save
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingContracts(null)}>
-                          Cancel
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <h4 className="font-medium">
-                          Backtest Scaled to {benchmarkData.liveContracts} contracts
-                          <span className="text-muted-foreground font-normal"> (from {benchmarkData.backtestContracts}ct)</span>
-                        </h4>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs"
-                          onClick={() => {
-                            setNewContractSize(benchmarkData.backtest.contract_size);
-                            setEditingContracts(benchmarkData.backtest.id);
-                          }}
-                        >
-                          Fix Contract Size
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {format(new Date(benchmarkData.backtest.period_start), 'MMM yyyy')} - {format(new Date(benchmarkData.backtest.period_end), 'MMM yyyy')}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Total Trades</p>
-                    <p className="font-semibold">{benchmarkData.scaledBenchmark.trades.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Net P&L ({benchmarkData.liveContracts}ct)</p>
-                    <p className="font-semibold text-success">${Math.round(benchmarkData.scaledBenchmark.netPnl).toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Avg Winner ({benchmarkData.liveContracts}ct)</p>
-                    <p className="font-semibold text-success">${Math.round(benchmarkData.scaledBenchmark.avgWin)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Avg Loser ({benchmarkData.liveContracts}ct)</p>
-                    <p className="font-semibold text-destructive">${Math.round(benchmarkData.scaledBenchmark.avgLoss)}</p>
-                  </div>
-                </div>
-                {/* Show raw values for reference */}
-                <div className="mt-3 pt-3 border-t border-border/30 text-xs text-muted-foreground">
-                  <p>Raw backtest ({benchmarkData.backtestContracts}ct): Net ${benchmarkData.rawBacktest.netPnl.toLocaleString()} | Avg Win ${Math.round(benchmarkData.rawBacktest.avgWin)} | Avg Loss ${Math.round(benchmarkData.rawBacktest.avgLoss)}</p>
-                </div>
-              </div>
-
-              {/* Live Stats Summary */}
-              <div className="rounded-lg border border-accent/50 bg-accent/5 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium text-accent">Live Performance ({benchmarkData.liveContracts}ct): {benchmarkData.bot?.name}</h4>
-                  <span className="text-sm text-muted-foreground">
-                    {benchmarkData.live.trades} trades
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Net P&L</p>
-                    <p className={cn("font-semibold", benchmarkData.live.netPnl >= 0 ? "text-success" : "text-destructive")}>
-                      {formatCurrency(benchmarkData.live.netPnl)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Avg Winner</p>
-                    <p className="font-semibold text-success">${Math.round(benchmarkData.live.avgWin)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Win Rate</p>
-                    <p className="font-semibold">{benchmarkData.live.winRate.toFixed(1)}%</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Profit Factor</p>
-                    <p className="font-semibold">{benchmarkData.live.profitFactor.toFixed(2)}</p>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+          <SimpleBenchmark
+            bots={bots}
+            liveTrades={botTrades}
+            backtestTrades={backtestTrades}
+          />
         </TabsContent>
 
-        {/* ADVANCED BENCHMARK TAB */}
-        <TabsContent value="advanced" className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium flex items-center gap-2">
-                <Target className="h-5 w-5" />
-                Live vs Backtest Benchmark
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {backtestTrades.length.toLocaleString()} historical trades loaded
-              </p>
-            </div>
-            {selectedBot !== "all" && (
-              <div className="text-sm text-muted-foreground">
-                {botMap.get(selectedBot)?.name} - {botMap.get(selectedBot)?.instrument}
-              </div>
-            )}
-          </div>
-
-          {backtestTrades.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-muted-foreground/30 p-8 text-center">
-              <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-              <h4 className="font-medium mb-2">No Backtest Data</h4>
-              <p className="text-sm text-muted-foreground">
-                Run the import script to load backtest trades.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {/* Rolling Benchmark + Risk Metrics */}
-              <div className="grid gap-6 lg:grid-cols-2">
-                <RollingBenchmarkCard benchmark={rollingBenchmark} />
-                <RiskMetricsCard
-                  liveMetrics={liveRiskMetrics}
-                  benchmarkMetrics={backtestRiskMetrics}
-                  showComparison={selectedBot !== "all" && !!backtestRiskMetrics}
-                />
-              </div>
-
-              {/* Portfolio Benchmark */}
-              {bots.length > 1 && (
-                <PortfolioBenchmarkTable benchmark={portfolioBenchmark} />
-              )}
-            </div>
-          )}
-        </TabsContent>
       </Tabs>
     </div>
   );
@@ -1218,34 +852,3 @@ function MetricCard({ label, value, color = "default", icon }: MetricCardProps) 
   );
 }
 
-// Benchmark Card Component
-interface BenchmarkCardProps {
-  label: string;
-  liveValue: number;
-  benchValue: number;
-  format: (v: number) => string;
-  higherIsBetter: boolean;
-}
-
-function BenchmarkCard({ label, liveValue, benchValue, format, higherIsBetter }: BenchmarkCardProps) {
-  const isBetter = higherIsBetter ? liveValue >= benchValue : liveValue <= benchValue;
-  const ratio = benchValue !== 0 ? (liveValue / benchValue) : 0;
-
-  return (
-    <div className="stat-card">
-      <p className="text-sm text-muted-foreground mb-1">{label}</p>
-      <div className="flex items-baseline gap-2">
-        <p className="text-2xl font-bold">{format(liveValue)}</p>
-        <p className={cn("text-sm", isBetter ? "text-success" : "text-destructive")}>
-          vs {format(benchValue)}
-        </p>
-      </div>
-      <div className="mt-2 h-2 bg-secondary rounded-full overflow-hidden">
-        <div
-          className={cn("h-full rounded-full", isBetter ? "bg-success" : "bg-warning")}
-          style={{ width: `${Math.min(100, ratio * 100)}%` }}
-        />
-      </div>
-    </div>
-  );
-}

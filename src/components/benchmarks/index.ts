@@ -9,3 +9,4 @@ export { RollingBenchmarkCard } from './RollingBenchmarkCard';
 export { RiskMetricsCard } from './RiskMetricsCard';
 export { PortfolioBenchmarkTable } from './PortfolioBenchmarkTable';
 export { BacktestImporter } from './BacktestImporter';
+export { SimpleBenchmark } from './SimpleBenchmark';
