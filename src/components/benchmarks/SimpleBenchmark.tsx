@@ -1,5 +1,6 @@
 /**
  * SimpleBenchmark - Clean backtest vs live comparison
+ * Per-instrument contract scaling
  */
 
 import { useMemo, useState } from 'react';
@@ -8,6 +9,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { BotTrade, BotBacktestTrade, Bot } from '@/types/bots';
+
+// Backtest was run at these contract sizes
+const BACKTEST_CONTRACTS: Record<string, number> = {
+  MNQ: 4,
+  MES: 4,
+  MGC: 2,
+  ZB: 2,
+  ZN: 2,
+  '6E': 1,
+  '6J': 1,
+};
 
 interface SimpleBenchmarkProps {
   bots: Bot[];
@@ -101,33 +113,61 @@ function StatsRow({ label, backtest, live, format, higherIsBetter = true }: {
   );
 }
 
-function BenchmarkTable({ backtest, live, title, contracts }: { backtest: Stats; live: Stats; title: string; contracts: number }) {
+interface BenchmarkTableProps {
+  backtest: Stats;
+  live: Stats;
+  title: string;
+  backtestContracts: number;
+  liveContracts: number;
+  onContractsChange: (v: number) => void;
+}
+
+function BenchmarkTable({ backtest, live, title, backtestContracts, liveContracts, onContractsChange }: BenchmarkTableProps) {
   const fmt = (v: number) => `$${Math.round(v).toLocaleString()}`;
   const pct = (v: number) => `${v.toFixed(1)}%`;
   const num = (v: number) => v.toFixed(2);
 
-  // Scale backtest dollar values by contracts (backtest was at 1 contract)
+  // Scale backtest dollar values: backtest was at X contracts, user wants Y contracts
+  // Scale factor = liveContracts / backtestContracts
+  const scale = liveContracts / backtestContracts;
   const scaledBacktest = {
     ...backtest,
-    avgWin: backtest.avgWin * contracts,
-    avgLoss: backtest.avgLoss * contracts,
-    netPnl: backtest.netPnl * contracts,
+    avgWin: backtest.avgWin * scale,
+    avgLoss: backtest.avgLoss * scale,
+    netPnl: backtest.netPnl * scale,
   };
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Backtest: {backtest.trades.toLocaleString()} trades @ {contracts}ct | Live: {live.trades} trades
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-base">{title}</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Backtest: {backtest.trades.toLocaleString()} trades @ {backtestContracts}ct | Live: {live.trades} trades
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Your contracts:</span>
+            <Select value={liveContracts.toString()} onValueChange={(v) => onContractsChange(parseInt(v))}>
+              <SelectTrigger className="w-20 h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                  <SelectItem key={n} value={n.toString()}>{n} ct</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
               <th className="py-2 px-4 text-left font-medium">Metric</th>
-              <th className="py-2 px-4 text-center font-medium">Backtest</th>
+              <th className="py-2 px-4 text-center font-medium">Backtest ({liveContracts}ct)</th>
               <th className="py-2 px-4 text-center font-medium">Live</th>
               <th className="py-2 px-4 text-center font-medium">Diff</th>
             </tr>
@@ -148,23 +188,22 @@ function BenchmarkTable({ backtest, live, title, contracts }: { backtest: Stats;
 }
 
 export function SimpleBenchmark({ bots, liveTrades, backtestTrades }: SimpleBenchmarkProps) {
-  const [contracts, setContracts] = useState(1);
+  // Per-instrument contract settings (user's live contracts)
+  const [contractSettings, setContractSettings] = useState<Record<string, number>>({
+    MNQ: 2,
+    MES: 2,
+    MGC: 2,
+    ZB: 1,
+    ZN: 1,
+    '6E': 1,
+    '6J': 1,
+  });
 
   // Get unique instruments
   const instruments = useMemo(() => {
     const set = new Set(bots.map(b => b.instrument));
     return Array.from(set).sort();
   }, [bots]);
-
-  // Calculate combined stats
-  const combinedStats = useMemo(() => {
-    const btTrades = backtestTrades.map(t => ({ pnl: t.pnl_usd || 0 }));
-    const ltTrades = liveTrades.filter(t => t.status === 'closed').map(t => ({ pnl: t.pnl || 0 }));
-    return {
-      backtest: calculateStats(btTrades),
-      live: calculateStats(ltTrades),
-    };
-  }, [backtestTrades, liveTrades]);
 
   // Calculate per-instrument stats
   const instrumentStats = useMemo(() => {
@@ -181,9 +220,42 @@ export function SimpleBenchmark({ bots, liveTrades, backtestTrades }: SimpleBenc
         instrument,
         backtest: calculateStats(btTrades),
         live: calculateStats(ltTrades),
+        backtestContracts: BACKTEST_CONTRACTS[instrument] || 1,
       };
     });
   }, [instruments, bots, backtestTrades, liveTrades]);
+
+  // Calculate combined stats (weighted by contract scaling)
+  const combinedStats = useMemo(() => {
+    // For combined, we need to scale each instrument's backtest to user's contracts first
+    let scaledBtPnls: number[] = [];
+    let livePnls: number[] = [];
+
+    instrumentStats.forEach(({ instrument, backtestContracts }) => {
+      const botIds = bots.filter(b => b.instrument === instrument).map(b => b.id);
+      const userContracts = contractSettings[instrument] || 1;
+      const scale = userContracts / backtestContracts;
+
+      // Scale backtest PnLs
+      backtestTrades
+        .filter(t => botIds.includes(t.bot_id))
+        .forEach(t => scaledBtPnls.push((t.pnl_usd || 0) * scale));
+
+      // Live PnLs (already at user's contract size)
+      liveTrades
+        .filter(t => botIds.includes(t.bot_id) && t.status === 'closed')
+        .forEach(t => livePnls.push(t.pnl || 0));
+    });
+
+    return {
+      backtest: calculateStats(scaledBtPnls.map(pnl => ({ pnl }))),
+      live: calculateStats(livePnls.map(pnl => ({ pnl }))),
+    };
+  }, [instrumentStats, bots, backtestTrades, liveTrades, contractSettings]);
+
+  const updateContracts = (instrument: string, value: number) => {
+    setContractSettings(prev => ({ ...prev, [instrument]: value }));
+  };
 
   if (backtestTrades.length === 0) {
     return (
@@ -195,22 +267,9 @@ export function SimpleBenchmark({ bots, liveTrades, backtestTrades }: SimpleBenc
 
   return (
     <div className="space-y-4">
-      {/* Contract Selector */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium">Backtest vs Live Benchmark</h3>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Scale backtest to:</span>
-          <Select value={contracts.toString()} onValueChange={(v) => setContracts(parseInt(v))}>
-            <SelectTrigger className="w-24">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                <SelectItem key={n} value={n.toString()}>{n} ct</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <p className="text-sm text-muted-foreground">Set your contracts per instrument</p>
       </div>
 
       <Tabs defaultValue="combined" className="space-y-4">
@@ -222,21 +281,72 @@ export function SimpleBenchmark({ bots, liveTrades, backtestTrades }: SimpleBenc
         </TabsList>
 
         <TabsContent value="combined">
-          <BenchmarkTable
-            title="All Instruments Combined"
-            backtest={combinedStats.backtest}
-            live={combinedStats.live}
-            contracts={contracts}
-          />
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">All Instruments Combined</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Backtest scaled to your contract sizes | Live: {combinedStats.live.trades} trades
+              </p>
+            </CardHeader>
+            <CardContent className="p-0">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/30">
+                    <th className="py-2 px-4 text-left font-medium">Metric</th>
+                    <th className="py-2 px-4 text-center font-medium">Backtest (scaled)</th>
+                    <th className="py-2 px-4 text-center font-medium">Live</th>
+                    <th className="py-2 px-4 text-center font-medium">Diff</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <StatsRow label="Win Rate" backtest={combinedStats.backtest.winRate} live={combinedStats.live.winRate} format={(v) => `${v.toFixed(1)}%`} />
+                  <StatsRow label="Avg Win" backtest={combinedStats.backtest.avgWin} live={combinedStats.live.avgWin} format={(v) => `$${Math.round(v).toLocaleString()}`} />
+                  <StatsRow label="Avg Loss" backtest={combinedStats.backtest.avgLoss} live={combinedStats.live.avgLoss} format={(v) => `$${Math.round(v).toLocaleString()}`} higherIsBetter={false} />
+                  <StatsRow label="Profit Factor" backtest={combinedStats.backtest.profitFactor} live={combinedStats.live.profitFactor} format={(v) => v.toFixed(2)} />
+                  <StatsRow label="Sharpe" backtest={combinedStats.backtest.sharpe} live={combinedStats.live.sharpe} format={(v) => v.toFixed(2)} />
+                  <StatsRow label="Sortino" backtest={combinedStats.backtest.sortino} live={combinedStats.live.sortino} format={(v) => v.toFixed(2)} />
+                  <StatsRow label="Net P&L" backtest={combinedStats.backtest.netPnl} live={combinedStats.live.netPnl} format={(v) => `$${Math.round(v).toLocaleString()}`} />
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+
+          {/* Contract settings summary */}
+          <div className="mt-4 p-3 rounded-lg bg-muted/30 text-sm">
+            <p className="font-medium mb-2">Your contract settings:</p>
+            <div className="flex flex-wrap gap-3">
+              {instruments.map(i => (
+                <div key={i} className="flex items-center gap-1">
+                  <span className="text-muted-foreground">{i}:</span>
+                  <Select
+                    value={(contractSettings[i] || 1).toString()}
+                    onValueChange={(v) => updateContracts(i, parseInt(v))}
+                  >
+                    <SelectTrigger className="w-16 h-7 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                        <SelectItem key={n} value={n.toString()}>{n}ct</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground">(bt: {BACKTEST_CONTRACTS[i] || 1})</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </TabsContent>
 
-        {instrumentStats.map(({ instrument, backtest, live }) => (
+        {instrumentStats.map(({ instrument, backtest, live, backtestContracts }) => (
           <TabsContent key={instrument} value={instrument}>
             <BenchmarkTable
               title={instrument}
               backtest={backtest}
               live={live}
-              contracts={contracts}
+              backtestContracts={backtestContracts}
+              liveContracts={contractSettings[instrument] || 1}
+              onContractsChange={(v) => updateContracts(instrument, v)}
             />
           </TabsContent>
         ))}
