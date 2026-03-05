@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
@@ -99,6 +99,53 @@ const KLBS_BACKTEST_DATA = {
 
 const BotContext = createContext<BotContextValue | null>(null);
 
+// Load static backtest trades from JSON (fallback when DB is empty)
+async function loadStaticBacktestTrades(): Promise<BotBacktestTrade[]> {
+  try {
+    const url = `${import.meta.env.BASE_URL}klbs_backtest_trades.json`;
+    console.log('[BotContext] Loading static backtest trades from:', url);
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn('[BotContext] Failed to fetch static trades:', res.status);
+      return [];
+    }
+    const data = await res.json();
+    console.log('[BotContext] Loaded', data.length, 'static backtest trades');
+    // Convert to BotBacktestTrade format with generated IDs
+    return data.map((t: {
+      trade_date: string;
+      instrument: string;
+      level: string;
+      direction: string;
+      outcome: string;
+      pnl_usd: number;
+      pnl_pts: number;
+      session: string;
+      year: number;
+      month: number;
+      contracts: number;
+    }, i: number) => ({
+      id: `static-${i}`,
+      bot_id: `static-${t.instrument}`,
+      trade_date: t.trade_date,
+      instrument: t.instrument,
+      level: t.level,
+      direction: t.direction,
+      outcome: t.outcome,
+      pnl_usd: t.pnl_usd,
+      pnl_pts: t.pnl_pts,
+      session: t.session,
+      year: t.year,
+      month: t.month,
+      contracts: t.contracts,
+      created_at: new Date().toISOString(),
+    }));
+  } catch (e) {
+    console.warn('Failed to load static backtest trades:', e);
+    return [];
+  }
+}
+
 export function BotProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [bots, setBots] = useState<Bot[]>([]);
@@ -106,6 +153,7 @@ export function BotProvider({ children }: { children: ReactNode }) {
   const [botTrades, setBotTrades] = useState<BotTrade[]>([]);
   const [backtestData, setBacktestData] = useState<BotBacktestData[]>([]);
   const [backtestTrades, setBacktestTrades] = useState<BotBacktestTrade[]>([]);
+  const [staticBacktestLoaded, setStaticBacktestLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -125,7 +173,7 @@ export function BotProvider({ children }: { children: ReactNode }) {
         supabase.from('bot_accounts').select('*').order('created_at', { ascending: false }),
         supabase.from('bot_trades').select('*').order('timestamp', { ascending: false }),
         supabase.from('bot_backtest_data').select('*').order('period_end', { ascending: false }),
-        supabase.from('bot_backtest_trades').select('*').order('trade_date', { ascending: true }),
+        supabase.from('bot_backtest_trades').select('*').order('trade_date', { ascending: true }).range(0, 49999),
       ]);
 
       // Check for table not existing errors (code 42P01 or message contains "relation")
@@ -153,7 +201,18 @@ export function BotProvider({ children }: { children: ReactNode }) {
       setBotAccounts(accountsRes.data || []);
       setBotTrades(tradesRes.data || []);
       setBacktestData(backtestRes.data || []);
-      setBacktestTrades(backtestTradesRes.data || []);
+      // Merge DB backtest trades with static trades (DB takes precedence per instrument)
+      const dbBacktestTrades = backtestTradesRes.data || [];
+      if (dbBacktestTrades.length > 0) {
+        // Get instruments that exist in DB
+        const dbInstruments = new Set(dbBacktestTrades.map((t: BotBacktestTrade) => t.instrument));
+        // Use ref for static trades (may not be loaded yet, but we merge when it loads too)
+        const staticTrades = staticTradesRef.current;
+        const staticForMissing = staticTrades.filter(t => !dbInstruments.has(t.instrument));
+        console.log('[BotContext] Merging DB trades with static. DB instruments:', [...dbInstruments]);
+        console.log('[BotContext] Static trades for missing instruments:', [...new Set(staticForMissing.map(t => t.instrument))]);
+        setBacktestTrades([...dbBacktestTrades, ...staticForMissing]);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch data';
       if (message === 'DATABASE_NOT_SETUP') {
@@ -165,6 +224,34 @@ export function BotProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, [user]);
+
+  // Reference to static trades for merging
+  const staticTradesRef = useRef<BotBacktestTrade[]>([]);
+
+  // Load static backtest trades (from JSON file) - always available
+  useEffect(() => {
+    if (staticBacktestLoaded) return;
+
+    loadStaticBacktestTrades().then(trades => {
+      console.log('[BotContext] Static trades loaded:', trades.length);
+      if (trades.length > 0) {
+        staticTradesRef.current = trades;
+        setBacktestTrades(prev => {
+          console.log('[BotContext] Previous backtest trades:', prev.length);
+          // If we already have DB trades, merge static trades for missing instruments
+          if (prev.length > 0 && !prev[0].id.startsWith('static-')) {
+            const dbInstruments = new Set(prev.map(t => t.instrument));
+            const staticForMissing = trades.filter(t => !dbInstruments.has(t.instrument));
+            console.log('[BotContext] Merging static trades for missing instruments:', [...new Set(staticForMissing.map(t => t.instrument))]);
+            return [...prev, ...staticForMissing];
+          }
+          console.log('[BotContext] Setting static backtest trades');
+          return trades;
+        });
+        setStaticBacktestLoaded(true);
+      }
+    });
+  }, [staticBacktestLoaded]);
 
   // Initial fetch and real-time subscriptions
   useEffect(() => {

@@ -277,3 +277,59 @@ export const BOT_PROP_FIRMS = [
   'TradeDay',
   'Elite Trader Funding',
 ] as const;
+
+// ============================================
+// BROKER INTEGRATION TYPES
+// ============================================
+
+export type BrokerType = 'tradovate' | 'ninjatrader' | 'tradestation';
+export type BrokerEnvironment = 'demo' | 'live';
+
+export interface BrokerConnection {
+  id: string;
+  user_id: string;
+  broker: BrokerType;
+  name: string;
+  environment: BrokerEnvironment;
+  username: string;
+  credentials_encrypted: string;
+  is_active: boolean;
+  last_sync_at?: string;
+  last_error?: string;
+  broker_user_id?: number;
+  broker_accounts?: BrokerAccountInfo[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BrokerAccountInfo {
+  id: number;
+  name: string;
+  accountType: string;
+  active: boolean;
+}
+
+export interface BrokerAccountMapping {
+  id: string;
+  broker_connection_id: string;
+  bot_account_id: string;
+  broker_account_id: number;
+  broker_account_name: string;
+  auto_sync: boolean;
+  sync_interval_minutes: number;
+  last_sync_at?: string;
+  last_fill_id?: number;
+  created_at: string;
+}
+
+export type BrokerConnectionFormData = {
+  broker: BrokerType;
+  name: string;
+  environment: BrokerEnvironment;
+  username: string;
+  password: string;
+  cid?: number;
+  sec?: string;
+};
+
+export type BrokerMappingFormData = Omit<BrokerAccountMapping, 'id' | 'created_at'>;

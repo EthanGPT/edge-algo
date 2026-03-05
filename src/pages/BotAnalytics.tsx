@@ -44,6 +44,7 @@ import { Link } from "react-router-dom";
 import { useBots } from "@/context/BotContext";
 import { useAuth } from "@/context/AuthContext";
 import { SimpleBenchmark } from "@/components/benchmarks";
+import { TradovateConnect } from "@/components/broker";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -818,6 +819,12 @@ export default function BotAnalytics() {
             liveTrades={botTrades}
             backtestTrades={backtestTrades}
           />
+
+          {/* Tradovate Integration */}
+          <div className="pt-6 border-t border-border">
+            <h3 className="text-lg font-medium mb-4">Auto-Import Trades</h3>
+            <TradovateConnect />
+          </div>
         </TabsContent>
 
       </Tabs>

@@ -179,7 +179,6 @@ function BenchmarkTable({ backtest, live, title, backtestContracts, liveContract
             <StatsRow label="Profit Factor" backtest={backtest.profitFactor} live={live.profitFactor} format={num} />
             <StatsRow label="Sharpe" backtest={backtest.sharpe} live={live.sharpe} format={num} />
             <StatsRow label="Sortino" backtest={backtest.sortino} live={live.sortino} format={num} />
-            <StatsRow label="Net P&L" backtest={scaledBacktest.netPnl} live={live.netPnl} format={fmt} />
           </tbody>
         </table>
       </CardContent>
@@ -207,11 +206,22 @@ export function SimpleBenchmark({ bots, liveTrades, backtestTrades }: SimpleBenc
 
   // Calculate per-instrument stats
   const instrumentStats = useMemo(() => {
+    console.log('[SimpleBenchmark] Total backtestTrades received:', backtestTrades.length);
+    console.log('[SimpleBenchmark] Instruments from bots:', instruments);
+    if (backtestTrades.length > 0) {
+      const sampleTrade = backtestTrades[0];
+      console.log('[SimpleBenchmark] Sample trade:', sampleTrade);
+      const uniqueInstruments = [...new Set(backtestTrades.map(t => t.instrument))];
+      console.log('[SimpleBenchmark] Unique instruments in backtest data:', uniqueInstruments);
+    }
+
     return instruments.map(instrument => {
       const botIds = bots.filter(b => b.instrument === instrument).map(b => b.id);
+      // Filter backtest trades by instrument directly (not bot_id) for reliability
       const btTrades = backtestTrades
-        .filter(t => botIds.includes(t.bot_id))
+        .filter(t => t.instrument === instrument)
         .map(t => ({ pnl: t.pnl_usd || 0 }));
+      console.log(`[SimpleBenchmark] ${instrument}: ${btTrades.length} backtest trades`);
       const ltTrades = liveTrades
         .filter(t => botIds.includes(t.bot_id) && t.status === 'closed')
         .map(t => ({ pnl: t.pnl || 0 }));
@@ -236,9 +246,9 @@ export function SimpleBenchmark({ bots, liveTrades, backtestTrades }: SimpleBenc
       const userContracts = contractSettings[instrument] || 1;
       const scale = userContracts / backtestContracts;
 
-      // Scale backtest PnLs
+      // Scale backtest PnLs - filter by instrument directly
       backtestTrades
-        .filter(t => botIds.includes(t.bot_id))
+        .filter(t => t.instrument === instrument)
         .forEach(t => scaledBtPnls.push((t.pnl_usd || 0) * scale));
 
       // Live PnLs (already at user's contract size)
@@ -305,7 +315,6 @@ export function SimpleBenchmark({ bots, liveTrades, backtestTrades }: SimpleBenc
                   <StatsRow label="Profit Factor" backtest={combinedStats.backtest.profitFactor} live={combinedStats.live.profitFactor} format={(v) => v.toFixed(2)} />
                   <StatsRow label="Sharpe" backtest={combinedStats.backtest.sharpe} live={combinedStats.live.sharpe} format={(v) => v.toFixed(2)} />
                   <StatsRow label="Sortino" backtest={combinedStats.backtest.sortino} live={combinedStats.live.sortino} format={(v) => v.toFixed(2)} />
-                  <StatsRow label="Net P&L" backtest={combinedStats.backtest.netPnl} live={combinedStats.live.netPnl} format={(v) => `$${Math.round(v).toLocaleString()}`} />
                 </tbody>
               </table>
             </CardContent>
