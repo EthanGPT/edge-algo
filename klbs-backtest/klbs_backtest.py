@@ -70,6 +70,37 @@ INSTRUMENTS = {
         'trail': 5,         # [OPTIMIZED]
         'name': 'Micro Gold'
     },
+    # ── Full-Size Contracts (9+ years data) ───────────────────────────────
+    'NQ': {
+        'file': 'data/NQ_15m.csv',
+        'tp': 50,           # Same as MNQ
+        'sl': 50,
+        'rz': 5,
+        'pv': 20.0,         # $20/point (10x MNQ)
+        'contracts': 1,     # Scaled for equivalent risk
+        'trail': 5,
+        'name': 'E-mini Nasdaq'
+    },
+    'ES': {
+        'file': 'data/ES_15m.csv',
+        'tp': 25,           # Same as MES
+        'sl': 25,
+        'rz': 5,
+        'pv': 50.0,         # $50/point (10x MES)
+        'contracts': 1,     # Scaled for equivalent risk
+        'trail': 5,
+        'name': 'E-mini S&P 500'
+    },
+    'GC': {
+        'file': 'data/GC_15m.csv',
+        'tp': 20,           # Same as MGC
+        'sl': 25,
+        'rz': 3,
+        'pv': 100.0,        # $100/point (10x MGC)
+        'contracts': 1,     # Scaled for equivalent risk
+        'trail': 5,
+        'name': 'Gold Futures'
+    },
     # ── Bonds (Less Volatile, Very Liquid) ──────────────────────────────
     'ZN': {
         'file': 'data/ZN_15m.csv',
@@ -125,11 +156,20 @@ SLIPPAGE = {
     'MNQ': 0.50,    # ~2 ticks ($1/contract)
     'MES': 0.25,    # ~1 tick ($1.25/contract)
     'MGC': 0.20,    # ~2 ticks ($2/contract)
+    'NQ':  0.50,    # Same as MNQ (same tick size)
+    'ES':  0.25,    # Same as MES (same tick size)
+    'GC':  0.20,    # Same as MGC (same tick size)
     'ZN':  0.015625, # 1 tick = 1/64 point ($15.63/contract)
     'ZB':  0.03125,  # 1 tick = 1/32 point ($31.25/contract)
     '6E':  0.00005,  # 0.5 pips ($6.25/contract)
     '6J':  0.0000005, # ~0.5 pips
 }
+
+# ── Multi-Entry Config ───────────────────────────────────────────────────────
+# When enabled, levels can fire multiple times per day after a cooldown period
+# instead of being locked after the first trade
+MULTI_ENTRY = False      # Toggle multi-entry mode
+COOLDOWN_BARS = 4        # Bars to wait before re-arming (4 bars = 1 hour on 15m)
 
 # ── Fees & Commissions ───────────────────────────────────────────────────────
 # Standard CME Micro futures costs (per contract, round-trip)
@@ -152,6 +192,25 @@ FEES = {
         'exchange': 0.22,
         'nfa': 0.01,
         'round_trip': 1.50,
+    },
+    # ── E-mini Contracts ───────────────────────────────────────────────
+    'NQ': {
+        'commission': 1.25,     # E-mini commission per side
+        'exchange': 1.18,       # CME exchange fee per side
+        'nfa': 0.02,
+        'round_trip': 4.90,     # Total per contract (both sides)
+    },
+    'ES': {
+        'commission': 1.25,
+        'exchange': 1.18,
+        'nfa': 0.02,
+        'round_trip': 4.90,
+    },
+    'GC': {
+        'commission': 1.25,
+        'exchange': 1.50,       # COMEX exchange fee
+        'nfa': 0.02,
+        'round_trip': 5.50,
     },
     # ── Bonds ───────────────────────────────────────────────────────────
     'ZN': {
@@ -372,7 +431,9 @@ def run_backtest(symbol, cfg, include_fees=INCLUDE_FEES, include_slippage=INCLUD
                 if st == 1 and i > bo:
                     if l <= lvl_price + rz:
                         if cur_sess:
-                            if i != ls:
+                            # Cooldown check: use COOLDOWN_BARS if multi-entry, else just check not same bar
+                            cooldown_ok = (i - ls >= COOLDOWN_BARS) if MULTI_ENTRY else (i != ls)
+                            if cooldown_ok:
                                 entry = lvl_price
                                 tp    = entry + tp_pts
                                 sl_p  = entry - sl_pts
@@ -391,7 +452,8 @@ def run_backtest(symbol, cfg, include_fees=INCLUDE_FEES, include_slippage=INCLUD
                                     'year': dt.year,
                                     'month': dt.month,
                                 })
-                                level_state[lvl_name] = 2
+                                # Multi-entry: stay armed (1), locked mode: lock level (2)
+                                level_state[lvl_name] = 1 if MULTI_ENTRY else 2
                                 level_ls[lvl_name]    = i
                         else:
                             level_state[lvl_name] = 0
@@ -412,7 +474,9 @@ def run_backtest(symbol, cfg, include_fees=INCLUDE_FEES, include_slippage=INCLUD
                 if st == -1 and i > bo:
                     if h >= lvl_price - rz:
                         if cur_sess:
-                            if i != ls:
+                            # Cooldown check: use COOLDOWN_BARS if multi-entry, else just check not same bar
+                            cooldown_ok = (i - ls >= COOLDOWN_BARS) if MULTI_ENTRY else (i != ls)
+                            if cooldown_ok:
                                 entry = lvl_price
                                 tp    = entry - tp_pts
                                 sl_p  = entry + sl_pts
@@ -431,7 +495,8 @@ def run_backtest(symbol, cfg, include_fees=INCLUDE_FEES, include_slippage=INCLUD
                                     'year': dt.year,
                                     'month': dt.month,
                                 })
-                                level_state[lvl_name] = -2
+                                # Multi-entry: stay armed (-1), locked mode: lock level (-2)
+                                level_state[lvl_name] = -1 if MULTI_ENTRY else -2
                                 level_ls[lvl_name]    = i
                         else:
                             level_state[lvl_name] = 0
@@ -2442,7 +2507,18 @@ if __name__ == '__main__':
     parser.add_argument('--optimize', action='store_true', help='Full parameter optimization (TP, SL, Trail)')
     parser.add_argument('--oos', action='store_true', help='Run out-of-sample forward test')
     parser.add_argument('--oos-split', type=int, default=2024, help='Year to split IS/OOS (default: 2024)')
+    parser.add_argument('--symbols', type=str, default=None, help='Comma-separated symbols to run (e.g., NQ,ES,GC)')
     args = parser.parse_args()
+
+    # Filter instruments if --symbols specified
+    if args.symbols:
+        selected = [s.strip().upper() for s in args.symbols.split(',')]
+        INSTRUMENTS_TO_RUN = {k: v for k, v in INSTRUMENTS.items() if k in selected}
+        if not INSTRUMENTS_TO_RUN:
+            print(f"ERROR: No matching symbols found. Available: {list(INSTRUMENTS.keys())}")
+            exit(1)
+    else:
+        INSTRUMENTS_TO_RUN = INSTRUMENTS
 
     print("\n" + "="*60)
     print("  KEY LEVEL BREAKOUT SYSTEM — BACKTEST")
@@ -2456,7 +2532,7 @@ if __name__ == '__main__':
         # Update INSTRUMENTS with optimal values and run final report
         print("\n>>> Generating final report with optimal settings...")
         final_results = []
-        for symbol, cfg in INSTRUMENTS.items():
+        for symbol, cfg in INSTRUMENTS_TO_RUN.items():
             opt = optimal_params[symbol]
             final_cfg = cfg.copy()
             final_cfg['tp'] = opt['tp']
@@ -2495,7 +2571,7 @@ if __name__ == '__main__':
         # Run standard backtest
         include_fees = not args.no_fees
         all_results = []
-        for symbol, cfg in INSTRUMENTS.items():
+        for symbol, cfg in INSTRUMENTS_TO_RUN.items():
             try:
                 result = run_backtest(symbol, cfg, include_fees=include_fees)
                 all_results.append(result)
