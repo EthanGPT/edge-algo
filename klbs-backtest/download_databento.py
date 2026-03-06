@@ -10,7 +10,9 @@ import databento as db
 import pandas as pd
 from datetime import datetime
 
-API_KEY = os.environ.get('DATABENTO_API_KEY', 'db-8teqxTgFY3swN3VXiBjTyaqJLWk4K')
+API_KEY = os.environ.get('DATABENTO_API_KEY')
+if not API_KEY:
+    raise ValueError("Set DATABENTO_API_KEY environment variable")
 
 # Instruments to download (continuous front-month)
 INSTRUMENTS = {
