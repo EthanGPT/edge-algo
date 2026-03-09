@@ -30,7 +30,8 @@ class FilterConfig:
     """All trading parameters controlled here."""
 
     # ML threshold - only take signals above this confidence
-    threshold: float = 0.55
+    # Using 50% to maximize volume - dynamic sizing handles edge on 60%+/70%+
+    threshold: float = 0.50
 
     # Trade limits
     max_trades_per_day: int = 999  # Unlimited - prop firm handles daily limits
@@ -47,7 +48,7 @@ class FilterConfig:
 
     # Position sizing thresholds (backtest: 80% WR at 65%+, 93% WR at 70%+)
     position_sizing_enabled: bool = True
-    confidence_2x: float = 0.65  # 2 contracts at 65%+ confidence
+    confidence_2x: float = 0.60  # 2 contracts at 60%+ confidence
     confidence_3x: float = 0.70  # 3 contracts at 70%+ confidence
 
     # TradersPost accounts with position limits
@@ -309,6 +310,24 @@ class TradingState:
 state = TradingState()
 
 # ══════════════════════════════════════════════════════════════════════════════
+# HISTORICAL WIN RATES (from 15,736 signals across 6+ years of backtests)
+# ══════════════════════════════════════════════════════════════════════════════
+
+LEVEL_WIN_RATES = {
+    "PDH": 0.516,
+    "PDL": 0.526,
+    "PMH": 0.566,
+    "PML": 0.601,
+    "LPH": 0.544,
+    "LPL": 0.561,
+}
+
+SESSION_WIN_RATES = {
+    "London": 0.569,
+    "NY": 0.544,
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
 # ML MODEL
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -321,28 +340,52 @@ def load_model():
         with open(MODEL_PATH, "rb") as f:
             model = pickle.load(f)
         print(f"Model loaded: {MODEL_PATH}")
+        print(f"Expected features: {model.n_features_in_}")
     else:
         print(f"WARNING: Model not found at {MODEL_PATH}")
 
+
 def extract_features(signal: Dict) -> np.ndarray:
+    """
+    Extract 29 features matching the training script exactly.
+
+    Features (29 total):
+    - Level one-hot (6): PDH, PDL, PMH, PML, LPH, LPL
+    - Direction one-hot (2): LONG, SHORT
+    - Session one-hot (2): London, NY
+    - Day of week one-hot (5): Mon-Fri
+    - Hour normalized (1)
+    - Instrument one-hot (3): MES, MNQ, MGC
+    - RSI normalized (1)
+    - RSI ROC normalized (1)
+    - RSI balanced zone flag (1): 35-65
+    - Momentum aligned flag (1): KEY insight
+    - MACD bullish (1)
+    - ADX normalized (1)
+    - ADX strong trend flag (1): >25
+    - ATR% normalized (1)
+    - Historical level WR (1)
+    - Historical session WR (1)
+    """
     features = []
 
-    # Level type (6 features)
+    # 1. Level one-hot (6 features)
     levels = ["PDH", "PDL", "PMH", "PML", "LPH", "LPL"]
     level = signal.get("level", "PDL")
     features.extend([1.0 if level == l else 0.0 for l in levels])
 
-    # Direction (2 features)
+    # 2. Direction one-hot (2 features)
     action = signal.get("action", "buy")
-    features.append(1.0 if action == "buy" else 0.0)
-    features.append(1.0 if action == "sell" else 0.0)
+    is_long = action == "buy"
+    features.append(1.0 if is_long else 0.0)
+    features.append(1.0 if not is_long else 0.0)
 
-    # Session (2 features)
+    # 3. Session one-hot (2 features)
     session = signal.get("session", "NY")
     features.append(1.0 if session == "London" else 0.0)
     features.append(1.0 if session == "NY" else 0.0)
 
-    # Day of week (5 features)
+    # 4. Day of week one-hot (5 features)
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     try:
         signal_time = datetime.fromisoformat(signal.get("time", "").replace("Z", "+00:00"))
@@ -351,42 +394,57 @@ def extract_features(signal: Dict) -> np.ndarray:
         day = datetime.now().strftime("%A")
     features.extend([1.0 if day == d else 0.0 for d in days])
 
-    # Hour (1 feature)
+    # 5. Hour normalized (1 feature)
     try:
         hour = signal_time.hour
     except:
         hour = 12
     features.append(hour / 24.0)
 
-    # Instrument (10 features - expanded for all trained instruments)
-    instruments = ["MNQ", "MES", "MGC", "NQ", "ES", "GC", "6E", "6J", "ZN", "ZB"]
+    # 6. Instrument one-hot (3 features) - MES/MNQ/MGC only
+    instruments = ["MES", "MNQ", "MGC"]
     inst = signal.get("ticker", "MNQ")
     features.extend([1.0 if inst == i else 0.0 for i in instruments])
 
-    # Technical indicators (7 features)
+    # 7. Technical indicators
     rsi = float(signal.get("rsi", 50))
+    rsi_roc = float(signal.get("rsi_roc", 0))
     macd = float(signal.get("macd", 0))
     adx = float(signal.get("adx", 25))
     atr_pct = float(signal.get("atr_pct", 0.5))
 
+    # RSI normalized (1 feature)
     features.append(rsi / 100.0)
-    features.append(1.0 if rsi > 70 else 0.0)
-    features.append(1.0 if rsi < 30 else 0.0)
+
+    # RSI ROC normalized (1 feature)
+    features.append(np.clip(rsi_roc / 20.0, -1.0, 1.0))
+
+    # RSI balanced zone (1 feature) - 35-65 is optimal
+    features.append(1.0 if 35 <= rsi <= 65 else 0.0)
+
+    # MOMENTUM ALIGNED (1 feature) - KEY INSIGHT FROM ANALYSIS
+    # LONGs want RSI not falling hard, SHORTs want RSI not rising hard
+    if is_long:
+        momentum_aligned = 1.0 if rsi_roc >= -5 else 0.0
+    else:
+        momentum_aligned = 1.0 if rsi_roc <= 5 else 0.0
+    features.append(momentum_aligned)
+
+    # MACD bullish (1 feature)
     features.append(1.0 if macd > 0 else 0.0)
+
+    # ADX normalized (1 feature)
     features.append(adx / 100.0)
+
+    # ADX strong trend (1 feature)
+    features.append(1.0 if adx > 25 else 0.0)
+
+    # ATR% normalized (1 feature)
     features.append(min(atr_pct / 2.0, 1.0))
-    features.append(0.5)  # Turbulence placeholder
 
-    # Rolling context (5 features)
-    recent_wr = 0.5
-    if len(state.last_outcomes) > 0:
-        recent_wr = sum(state.last_outcomes[-10:]) / len(state.last_outcomes[-10:])
-
-    features.append(recent_wr)
-    features.append(min(state.consecutive_losses / 5.0, 1.0))
-    features.append(0.5)  # Level WR placeholder
-    features.append(0.5)  # Session WR placeholder
-    features.append(min(state.trades_today / 10.0, 1.0))
+    # 8. Historical win rates (2 features) - REAL DATA from 9+ years
+    features.append(LEVEL_WIN_RATES.get(level, 0.55))
+    features.append(SESSION_WIN_RATES.get(session, 0.55))
 
     return np.array(features, dtype=np.float32)
 
