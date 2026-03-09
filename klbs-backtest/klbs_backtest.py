@@ -41,7 +41,7 @@ STARTING_CAPITAL = 100_000
 
 INSTRUMENTS = {
     'MNQ': {
-        'file': 'data/MNQ_15m.csv',
+        'file': 'data/MNQ_combined_15m.csv',  # Combined NQ+MNQ for extended history
         'tp': 50,           # [OPTIMIZED] Target profit (pts)
         'sl': 50,           # [OPTIMIZED] Initial stop loss (pts)
         'rz': 5,            # Retest zone (pts)
@@ -51,7 +51,7 @@ INSTRUMENTS = {
         'name': 'Micro Nasdaq'
     },
     'MES': {
-        'file': 'data/MES_15m.csv',
+        'file': 'data/MES_combined_15m.csv',  # Combined ES+MES for extended history
         'tp': 25,           # [OPTIMIZED]
         'sl': 25,           # [OPTIMIZED]
         'rz': 5,
@@ -61,7 +61,7 @@ INSTRUMENTS = {
         'name': 'Micro S&P 500'
     },
     'MGC': {
-        'file': 'data/MGC_15m.csv',
+        'file': 'data/MGC_combined_15m.csv',  # Combined GC+MGC for extended history
         'tp': 20,           # [OPTIMIZED]
         'sl': 25,           # [OPTIMIZED]
         'rz': 3,

@@ -16,17 +16,17 @@ import os
 # ── Config (matches Pine script presets) ──────────────────────────────────────
 INSTRUMENTS = {
     'MNQ': {
-        'file': 'data/MNQ_15m.csv',
+        'file': 'data/MNQ_combined_15m.csv',  # Combined NQ+MNQ for extended history
         'tp': 35, 'sl': 50, 'rz': 5, 'pv': 2.0, 'contracts': 4, 'trail': 5,
         'name': 'Micro Nasdaq'
     },
     'MES': {
-        'file': 'data/MES_15m.csv',
+        'file': 'data/MES_combined_15m.csv',  # Combined ES+MES for extended history
         'tp': 25, 'sl': 25, 'rz': 5, 'pv': 5.0, 'contracts': 4, 'trail': 5,
         'name': 'Micro S&P 500'
     },
     'MGC': {
-        'file': 'data/MGC_15m.csv',
+        'file': 'data/MGC_combined_15m.csv',  # Combined GC+MGC for extended history
         'tp': 20, 'sl': 25, 'rz': 3, 'pv': 10.0, 'contracts': 2, 'trail': 5,
         'name': 'Micro Gold'
     },

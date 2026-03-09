@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """
-Databento data downloader for NQ, ES, GC futures.
+Databento data downloader for futures.
 Downloads 1-minute OHLCV data and resamples to 15-minute.
 Uses continuous front-month contracts.
+
+Instruments:
+- MES/MNQ: Launched May 2019
+- MGC: Launched October 2021
+- ES/NQ/GC: Available from 2017+
 """
 
 import os
@@ -15,13 +20,29 @@ if not API_KEY:
     raise ValueError("Set DATABENTO_API_KEY environment variable")
 
 # Instruments to download (continuous front-month)
+# Micros for trading, full-size for extended history if needed
 INSTRUMENTS = {
-    'NQ': 'NQ.c.0',  # E-mini NASDAQ 100
-    'ES': 'ES.c.0',  # E-mini S&P 500
-    'GC': 'GC.c.0',  # Gold Futures
+    # Micros (what we trade)
+    'MES': 'MES.c.0',  # Micro E-mini S&P 500 (May 2019+)
+    'MNQ': 'MNQ.c.0',  # Micro E-mini NASDAQ 100 (May 2019+)
+    'MGC': 'MGC.c.0',  # Micro Gold (Oct 2021+)
+    # Full-size (for extended history/backup)
+    'ES': 'ES.c.0',   # E-mini S&P 500
+    'NQ': 'NQ.c.0',   # E-mini NASDAQ 100
+    'GC': 'GC.c.0',   # Gold Futures
 }
 
-def download_continuous(client, symbol, continuous_symbol, output_dir, start_date='2017-01-01', end_date='2026-03-01'):
+# Date ranges by instrument (micros have limited history)
+INSTRUMENT_START_DATES = {
+    'MES': '2019-05-01',
+    'MNQ': '2019-05-01',
+    'MGC': '2021-10-01',
+    'ES': '2017-01-01',
+    'NQ': '2017-01-01',
+    'GC': '2017-01-01',
+}
+
+def download_continuous(client, symbol, continuous_symbol, output_dir, start_date=None, end_date='2026-03-10'):
     """Download continuous contract data."""
     print(f"\n{'='*50}")
     print(f"Downloading {symbol} ({continuous_symbol})")
@@ -82,17 +103,18 @@ def download_continuous(client, symbol, continuous_symbol, output_dir, start_dat
 def main():
     client = db.Historical(API_KEY)
     output_dir = os.path.dirname(os.path.abspath(__file__)) + '/data'
+    end_date = '2026-03-10'
 
     print("="*50)
     print("DATABENTO FUTURES DOWNLOADER")
     print("="*50)
     print(f"Instruments: {', '.join(INSTRUMENTS.keys())}")
-    print(f"Date range: 2017-01-01 to 2026-03-01")
     print(f"Output: {output_dir}")
 
     success = 0
     for sym, continuous_sym in INSTRUMENTS.items():
-        if download_continuous(client, sym, continuous_sym, output_dir):
+        start_date = INSTRUMENT_START_DATES.get(sym, '2017-01-01')
+        if download_continuous(client, sym, continuous_sym, output_dir, start_date=start_date, end_date=end_date):
             success += 1
 
     print(f"\n{'='*50}")

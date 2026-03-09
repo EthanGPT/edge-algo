@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """
-KLBS ML Signal Filter - Training Script v3
+KLBS ML Signal Filter - Training Script v4
 
 Focused on MES/MNQ/MGC micros only.
-Uses RSI momentum (rsi_roc) and real historical win rates.
+Uses CONTINUOUS weights for RSI, MACD, and ADX/DI based on backtest analysis.
+
+Key changes from v3:
+- RSI: Continuous score based on direction (not binary 35-65 zone)
+- MACD: Added histogram momentum (not just binary > 0)
+- ADX: Replaced ADX_Strong with DI alignment score
 
 Run: python -m ml-api-deploy.train_model
 """
@@ -61,10 +66,13 @@ def load_data():
     script_dir = Path(__file__).parent.parent
     os.chdir(script_dir)
 
-    # Load OHLC data for all instruments
+    # Load OHLC data for all instruments (use combined files for extended history)
     ohlc = {}
     for inst in ALL_INSTRUMENTS:
-        filepath = Path("data") / f"{inst}_15m.csv"
+        # Prefer combined files (ES+MES, NQ+MNQ, GC+MGC) for more training data
+        combined_path = Path("data") / f"{inst}_combined_15m.csv"
+        regular_path = Path("data") / f"{inst}_15m.csv"
+        filepath = combined_path if combined_path.exists() else regular_path
         if filepath.exists():
             df = pd.read_csv(filepath, parse_dates=["ts_event"])
             df = df.set_index("ts_event").sort_index()
@@ -75,7 +83,8 @@ def load_data():
             df["rsi"] = calculate_rsi(df["close"])
             df["rsi_roc"] = df["rsi"].diff(3)  # RSI rate of change over 3 bars
             df["macd"], df["macd_signal"] = calculate_macd(df["close"])
-            df["adx"] = calculate_adx(df["high"], df["low"], df["close"])
+            df["macd_hist"] = df["macd"] - df["macd_signal"]  # Histogram for momentum
+            df["adx"], df["plus_di"], df["minus_di"] = calculate_adx(df["high"], df["low"], df["close"])
             atr = calculate_atr(df["high"], df["low"], df["close"])
             df["atr_pct"] = (atr / df["close"]) * 100
 
@@ -117,6 +126,7 @@ def calculate_macd(prices, fast=12, slow=26, signal=9):
 
 
 def calculate_adx(high, low, close, period=14):
+    """Calculate ADX, +DI, and -DI for directional movement analysis."""
     plus_dm = high.diff()
     minus_dm = -low.diff()
     plus_dm = plus_dm.where((plus_dm > minus_dm) & (plus_dm > 0), 0)
@@ -132,7 +142,9 @@ def calculate_adx(high, low, close, period=14):
     minus_di = 100 * (minus_dm.rolling(window=period).mean() / (atr + 1e-10))
 
     dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di + 1e-10)
-    return dx.rolling(window=period).mean().fillna(25)
+    adx = dx.rolling(window=period).mean().fillna(25)
+
+    return adx, plus_di.fillna(25), minus_di.fillna(25)
 
 
 def calculate_atr(high, low, close, period=14):
@@ -144,8 +156,13 @@ def calculate_atr(high, low, close, period=14):
 
 
 def get_market_context(ohlc, instrument, signal_time):
-    """Get indicators at signal time including RSI ROC."""
-    defaults = {"rsi": 50, "rsi_roc": 0, "macd": 0, "adx": 25, "atr_pct": 0.5}
+    """Get indicators at signal time including RSI ROC, MACD histogram, and DI values."""
+    defaults = {
+        "rsi": 50, "rsi_roc": 0,
+        "macd": 0, "macd_hist": 0,
+        "adx": 25, "plus_di": 25, "minus_di": 25,
+        "atr_pct": 0.5
+    }
 
     if instrument not in ohlc:
         return defaults
@@ -167,7 +184,10 @@ def get_market_context(ohlc, instrument, signal_time):
         "rsi": bar["rsi"] if not pd.isna(bar["rsi"]) else 50,
         "rsi_roc": bar["rsi_roc"] if not pd.isna(bar["rsi_roc"]) else 0,
         "macd": bar["macd"] if not pd.isna(bar["macd"]) else 0,
+        "macd_hist": bar["macd_hist"] if not pd.isna(bar["macd_hist"]) else 0,
         "adx": bar["adx"] if not pd.isna(bar["adx"]) else 25,
+        "plus_di": bar["plus_di"] if not pd.isna(bar["plus_di"]) else 25,
+        "minus_di": bar["minus_di"] if not pd.isna(bar["minus_di"]) else 25,
         "atr_pct": bar["atr_pct"] if not pd.isna(bar["atr_pct"]) else 0.5,
     }
 
@@ -176,23 +196,23 @@ def extract_features(signal, ohlc, rolling_context=None):
     """
     Extract features for a signal.
 
-    Feature vector (29 features):
+    Feature vector (26 features) - v4 CLEAN with data-driven scores only:
     - Level one-hot (6): PDH, PDL, PMH, PML, LPH, LPL
     - Direction one-hot (2): LONG, SHORT
     - Session one-hot (2): London, NY
     - Day of week one-hot (5): Mon-Fri
     - Hour normalized (1)
     - Instrument one-hot (3): MES, MNQ, MGC
-    - RSI normalized (1)
-    - RSI ROC normalized (1)
-    - RSI balanced zone flag (1): 35-65
-    - Momentum aligned flag (1): KEY - momentum supports trade direction
-    - MACD bullish flag (1)
-    - ADX normalized (1)
-    - ADX strong trend flag (1): >25
+    - RSI_Score (1): Direction-aware continuous score from backtest data
+    - RSI_Momentum (1): RSI ROC aligned with direction
+    - MACD_Score (1): Direction-aware MACD alignment
+    - MACD_Hist (1): Momentum direction from histogram
+    - DI_Align (1): +DI/-DI alignment with direction
     - ATR% normalized (1)
     - Historical level WR (1)
     - Historical session WR (1)
+
+    REMOVED: Raw RSI, raw ADX, raw MACD - using data-driven scores instead
     """
     features = []
 
@@ -229,44 +249,78 @@ def extract_features(signal, ohlc, rolling_context=None):
     inst = signal.get("instrument", "MNQ")
     features.extend([1.0 if inst == i else 0.0 for i in INSTRUMENTS])
 
-    # 7. Technical indicators from market context
+    # 7. Technical indicators - DATA-DRIVEN SCORES ONLY
     signal_time = pd.Timestamp(signal["date"])
-    # Use source_instrument for OHLC lookup (ES/NQ/GC), but inst for features (MES/MNQ/MGC)
     source_inst = signal.get("source_instrument", inst)
     ctx = get_market_context(ohlc, source_inst, signal_time)
 
     rsi = ctx["rsi"]
     rsi_roc = ctx["rsi_roc"]
-    adx = ctx["adx"]
+    macd = ctx["macd"]
+    macd_hist = ctx["macd_hist"]
+    plus_di = ctx["plus_di"]
+    minus_di = ctx["minus_di"]
 
-    # RSI normalized (1 feature)
-    features.append(rsi / 100.0)
-
-    # RSI ROC normalized (1 feature)
-    features.append(np.clip(rsi_roc / 20.0, -1.0, 1.0))
-
-    # RSI in balanced zone (1 feature) - 35-65 is optimal
-    features.append(1.0 if 35 <= rsi <= 65 else 0.0)
-
-    # MOMENTUM ALIGNED (1 feature) - THE KEY INSIGHT FROM ANALYSIS
-    # LONGs want RSI rising (rsi_roc >= 0) or at least not falling hard
-    # SHORTs want RSI falling (rsi_roc <= 0) or at least not rising hard
+    # RSI_SCORE (1 feature) - Direction-aware from backtest data
+    # LONG: RSI 45-65 = best (62% WR), <35 = worst (51% WR)
+    # SHORT: RSI 35-55 = best (60% WR), >65 = worst (51% WR)
     if is_long:
-        momentum_aligned = 1.0 if rsi_roc >= -5 else 0.0  # Not falling too fast
+        if rsi < 35:
+            rsi_score = 0.3   # Falling knife - 51% WR
+        elif rsi < 45:
+            rsi_score = 0.6   # OK - 57% WR
+        elif rsi < 65:
+            rsi_score = 1.0   # Best - 62% WR
+        else:
+            rsi_score = 0.8   # Still good - 62% WR
     else:
-        momentum_aligned = 1.0 if rsi_roc <= 5 else 0.0   # Not rising too fast
-    features.append(momentum_aligned)
+        if rsi > 65:
+            rsi_score = 0.3   # FOMO rally - 51% WR
+        elif rsi > 55:
+            rsi_score = 0.6   # OK - 55% WR
+        elif rsi > 35:
+            rsi_score = 1.0   # Best - 60% WR
+        else:
+            rsi_score = 0.8   # Still good - 59% WR
+    features.append(rsi_score)
 
-    # MACD bullish (1 feature)
-    features.append(1.0 if ctx["macd"] > 0 else 0.0)
+    # RSI_MOMENTUM (1 feature) - RSI ROC aligned with direction
+    # LONG + rising RSI = 61.3% WR vs 56% falling
+    # SHORT + falling RSI = 58.2% WR vs 53.4% rising
+    if is_long:
+        rsi_momentum = 1.0 if rsi_roc >= 0 else (0.7 if rsi_roc >= -5 else 0.3)
+    else:
+        rsi_momentum = 1.0 if rsi_roc <= 0 else (0.7 if rsi_roc <= 5 else 0.3)
+    features.append(rsi_momentum)
 
-    # ADX normalized (1 feature)
-    features.append(adx / 100.0)
+    # MACD_SCORE (1 feature) - Direction-aware MACD alignment
+    # LONG + bullish MACD = 59.9% WR vs 55.8%
+    # SHORT + bearish MACD = 57.3% WR vs 54%
+    if is_long:
+        macd_score = 1.0 if macd > 0 else 0.5
+    else:
+        macd_score = 1.0 if macd <= 0 else 0.5
+    features.append(macd_score)
 
-    # ADX strong trend (1 feature) - ADX > 25 indicates trending
-    features.append(1.0 if adx > 25 else 0.0)
+    # MACD_HIST (1 feature) - Momentum direction
+    # LONG + rising histogram = 62% WR
+    # SHORT + falling histogram = 59.5% WR
+    if is_long:
+        macd_hist_score = 1.0 if macd_hist > 0 else 0.5
+    else:
+        macd_hist_score = 1.0 if macd_hist <= 0 else 0.5
+    features.append(macd_hist_score)
 
-    # ATR% normalized (1 feature)
+    # DI_ALIGN (1 feature) - Directional movement alignment
+    # LONG + (+DI > -DI) = 61.8% WR vs 55.7%
+    # SHORT + (-DI > +DI) = 57.8% WR vs 53.7%
+    if is_long:
+        di_align = 1.0 if plus_di > minus_di else 0.5
+    else:
+        di_align = 1.0 if minus_di > plus_di else 0.5
+    features.append(di_align)
+
+    # ATR% normalized (1 feature) - Keep this, it's useful for volatility
     features.append(min(ctx["atr_pct"] / 2.0, 1.0))
 
     # 8. Historical win rates (2 features) - REAL DATA
@@ -285,10 +339,10 @@ def get_feature_names():
     names.extend(DAYS)  # 5
     names.append("Hour")  # 1
     names.extend(INSTRUMENTS)  # 3
-    names.extend(["RSI", "RSI_ROC", "RSI_Balanced", "MomentumAligned"])  # 4
-    names.extend(["MACD_Bull", "ADX", "ADX_Strong", "ATR%"])  # 4
-    names.extend(["LevelWR", "SessWR"])  # 2
-    return names  # Total: 29
+    # Data-driven scores only - NO raw RSI/ADX/MACD
+    names.extend(["RSI_Score", "RSI_Momentum", "MACD_Score", "MACD_Hist", "DI_Align"])  # 5
+    names.extend(["ATR%", "LevelWR", "SessWR"])  # 3
+    return names  # Total: 26
 
 
 def train_model(X, y, signals):

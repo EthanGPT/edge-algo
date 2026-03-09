@@ -349,22 +349,20 @@ def load_model():
 
 def extract_features(signal: Dict) -> np.ndarray:
     """
-    Extract 29 features matching the training script exactly.
+    Extract 26 features matching training script v4 CLEAN.
 
-    Features (29 total):
+    Features (26 total) - Data-driven scores only, NO raw values:
     - Level one-hot (6): PDH, PDL, PMH, PML, LPH, LPL
     - Direction one-hot (2): LONG, SHORT
     - Session one-hot (2): London, NY
     - Day of week one-hot (5): Mon-Fri
     - Hour normalized (1)
     - Instrument one-hot (3): MES, MNQ, MGC
-    - RSI normalized (1)
-    - RSI ROC normalized (1)
-    - RSI balanced zone flag (1): 35-65
-    - Momentum aligned flag (1): KEY insight
-    - MACD bullish (1)
-    - ADX normalized (1)
-    - ADX strong trend flag (1): >25
+    - RSI_Score (1): Direction-aware from backtest data
+    - RSI_Momentum (1): RSI ROC aligned with direction
+    - MACD_Score (1): Direction-aware MACD alignment
+    - MACD_Hist (1): Momentum direction from histogram
+    - DI_Align (1): +DI/-DI alignment with direction
     - ATR% normalized (1)
     - Historical level WR (1)
     - Historical session WR (1)
@@ -403,48 +401,73 @@ def extract_features(signal: Dict) -> np.ndarray:
         hour = 12
     features.append(hour / 24.0)
 
-    # 6. Instrument one-hot (3 features) - MES/MNQ/MGC only
+    # 6. Instrument one-hot (3 features)
     instruments = ["MES", "MNQ", "MGC"]
     inst = signal.get("ticker", "MNQ")
     features.extend([1.0 if inst == i else 0.0 for i in instruments])
 
-    # 7. Technical indicators
+    # 7. Technical indicators - DATA-DRIVEN SCORES ONLY
     rsi = float(signal.get("rsi", 50))
     rsi_roc = float(signal.get("rsi_roc", 0))
     macd = float(signal.get("macd", 0))
-    adx = float(signal.get("adx", 25))
+    macd_hist = float(signal.get("macd_hist", 0))
+    plus_di = float(signal.get("plus_di", 25))
+    minus_di = float(signal.get("minus_di", 25))
     atr_pct = float(signal.get("atr_pct", 0.5))
 
-    # RSI normalized (1 feature)
-    features.append(rsi / 100.0)
-
-    # RSI ROC normalized (1 feature)
-    features.append(np.clip(rsi_roc / 20.0, -1.0, 1.0))
-
-    # RSI balanced zone (1 feature) - 35-65 is optimal
-    features.append(1.0 if 35 <= rsi <= 65 else 0.0)
-
-    # MOMENTUM ALIGNED (1 feature) - KEY INSIGHT FROM ANALYSIS
-    # LONGs want RSI not falling hard, SHORTs want RSI not rising hard
+    # RSI_SCORE (1 feature) - Direction-aware from backtest data
     if is_long:
-        momentum_aligned = 1.0 if rsi_roc >= -5 else 0.0
+        if rsi < 35:
+            rsi_score = 0.3   # Falling knife - 51% WR
+        elif rsi < 45:
+            rsi_score = 0.6   # OK - 57% WR
+        elif rsi < 65:
+            rsi_score = 1.0   # Best - 62% WR
+        else:
+            rsi_score = 0.8   # Still good
     else:
-        momentum_aligned = 1.0 if rsi_roc <= 5 else 0.0
-    features.append(momentum_aligned)
+        if rsi > 65:
+            rsi_score = 0.3   # FOMO rally - 51% WR
+        elif rsi > 55:
+            rsi_score = 0.6   # OK - 55% WR
+        elif rsi > 35:
+            rsi_score = 1.0   # Best - 60% WR
+        else:
+            rsi_score = 0.8   # Still good
+    features.append(rsi_score)
 
-    # MACD bullish (1 feature)
-    features.append(1.0 if macd > 0 else 0.0)
+    # RSI_MOMENTUM (1 feature) - RSI ROC aligned with direction
+    if is_long:
+        rsi_momentum = 1.0 if rsi_roc >= 0 else (0.7 if rsi_roc >= -5 else 0.3)
+    else:
+        rsi_momentum = 1.0 if rsi_roc <= 0 else (0.7 if rsi_roc <= 5 else 0.3)
+    features.append(rsi_momentum)
 
-    # ADX normalized (1 feature)
-    features.append(adx / 100.0)
+    # MACD_SCORE (1 feature) - Direction-aware MACD alignment
+    if is_long:
+        macd_score = 1.0 if macd > 0 else 0.5
+    else:
+        macd_score = 1.0 if macd <= 0 else 0.5
+    features.append(macd_score)
 
-    # ADX strong trend (1 feature)
-    features.append(1.0 if adx > 25 else 0.0)
+    # MACD_HIST (1 feature) - Momentum direction
+    if is_long:
+        macd_hist_score = 1.0 if macd_hist > 0 else 0.5
+    else:
+        macd_hist_score = 1.0 if macd_hist <= 0 else 0.5
+    features.append(macd_hist_score)
+
+    # DI_ALIGN (1 feature) - Directional movement alignment
+    if is_long:
+        di_align = 1.0 if plus_di > minus_di else 0.5
+    else:
+        di_align = 1.0 if minus_di > plus_di else 0.5
+    features.append(di_align)
 
     # ATR% normalized (1 feature)
     features.append(min(atr_pct / 2.0, 1.0))
 
-    # 8. Historical win rates (2 features) - REAL DATA from 9+ years
+    # 8. Historical win rates (2 features)
     features.append(LEVEL_WIN_RATES.get(level, 0.55))
     features.append(SESSION_WIN_RATES.get(session, 0.55))
 
