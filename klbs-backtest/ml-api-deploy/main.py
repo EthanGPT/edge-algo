@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION - THE BRAIN
@@ -153,6 +154,7 @@ class SupabaseDB:
                 "tp_price": float(signal.get("tp", 0)) if signal.get("tp") else None,
                 "sl_price": float(signal.get("sl", 0)) if signal.get("sl") else None,
                 "rsi": float(signal.get("rsi", 50)),
+                "rsi_roc": float(signal.get("rsi_roc", 0)),
                 "macd": float(signal.get("macd", 0)),
                 "adx": float(signal.get("adx", 25)),
                 "atr_pct": float(signal.get("atr_pct", 0.5)),
@@ -532,6 +534,15 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# CORS - allow frontend to call API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins (you can restrict to your domain later)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.on_event("startup")
 async def startup():
     load_model()
@@ -725,6 +736,224 @@ async def filter_validation():
         }
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/learning-insights")
+async def learning_insights():
+    """
+    Detailed ML learning insights - what's working, what's not, where to improve.
+    Use this to understand how the model is performing on live data.
+    """
+    if not db.enabled:
+        return {"error": "Database not connected"}
+
+    try:
+        # Get ALL signals with outcomes
+        result = db.client.table("ml_signals")\
+            .select("*")\
+            .not_.is_("outcome", "null")\
+            .execute()
+
+        if not result.data:
+            return {"error": "No signals with outcomes yet"}
+
+        signals = result.data
+        approved = [s for s in signals if s.get("approved")]
+        rejected = [s for s in signals if not s.get("approved")]
+
+        def win_rate(data):
+            if not data:
+                return 0
+            return sum(1 for s in data if s.get("outcome") == "WIN") / len(data)
+
+        # Overall stats
+        approved_wr = win_rate(approved)
+        rejected_wr = win_rate(rejected)
+
+        # Breakdowns
+        levels = ["PDH", "PDL", "PMH", "PML", "LPH", "LPL"]
+        sessions = ["London", "NY"]
+        instruments = ["MES", "MNQ", "MGC"]
+
+        level_stats = {}
+        for level in levels:
+            level_signals = [s for s in signals if s.get("level") == level]
+            if len(level_signals) >= 2:
+                level_stats[level] = {
+                    "count": len(level_signals),
+                    "win_rate": f"{win_rate(level_signals)*100:.1f}%"
+                }
+
+        session_stats = {}
+        for session in sessions:
+            sess_signals = [s for s in signals if s.get("session") == session]
+            if len(sess_signals) >= 2:
+                session_stats[session] = {
+                    "count": len(sess_signals),
+                    "win_rate": f"{win_rate(sess_signals)*100:.1f}%"
+                }
+
+        instrument_stats = {}
+        for inst in instruments:
+            inst_signals = [s for s in signals if s.get("ticker") == inst]
+            if len(inst_signals) >= 2:
+                instrument_stats[inst] = {
+                    "count": len(inst_signals),
+                    "win_rate": f"{win_rate(inst_signals)*100:.1f}%"
+                }
+
+        # Find mistakes
+        missed_wins = [s for s in rejected if s.get("outcome") == "WIN"]
+        bad_approvals = [s for s in approved if s.get("outcome") == "LOSS"]
+
+        mistakes = {
+            "missed_wins": [
+                {
+                    "ticker": s.get("ticker"),
+                    "level": s.get("level"),
+                    "session": s.get("session"),
+                    "confidence": f"{s.get('confidence', 0)*100:.1f}%",
+                    "rsi": s.get("rsi"),
+                }
+                for s in missed_wins[:5]  # Last 5
+            ],
+            "bad_approvals": [
+                {
+                    "ticker": s.get("ticker"),
+                    "level": s.get("level"),
+                    "session": s.get("session"),
+                    "confidence": f"{s.get('confidence', 0)*100:.1f}%",
+                    "rsi": s.get("rsi"),
+                }
+                for s in bad_approvals[:5]  # Last 5
+            ],
+        }
+
+        # Recommendations
+        recommendations = []
+        if len(rejected) > 5 and rejected_wr > 0.5:
+            recommendations.append("Model is rejecting too many winners - consider lowering threshold")
+        if len(approved) > 5 and approved_wr < 0.5:
+            recommendations.append("Approved signals losing - consider raising threshold or adding filters")
+
+        return {
+            "total_signals_with_outcomes": len(signals),
+            "approved": {
+                "count": len(approved),
+                "win_rate": f"{approved_wr*100:.1f}%",
+                "wins": sum(1 for s in approved if s.get("outcome") == "WIN"),
+                "losses": sum(1 for s in approved if s.get("outcome") == "LOSS"),
+            },
+            "rejected": {
+                "count": len(rejected),
+                "win_rate": f"{rejected_wr*100:.1f}%",
+                "note": "Lower is better - means we're right to reject",
+            },
+            "filter_edge": f"{(approved_wr - rejected_wr)*100:.1f}%",
+            "by_level": level_stats,
+            "by_session": session_stats,
+            "by_instrument": instrument_stats,
+            "recent_mistakes": mistakes,
+            "recommendations": recommendations,
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# RETRAINING
+# ══════════════════════════════════════════════════════════════════════════════
+
+import threading
+import subprocess
+
+retrain_status = {
+    "running": False,
+    "last_run": None,
+    "last_result": None,
+    "last_error": None,
+}
+
+def run_retrain():
+    """Run retraining in background thread."""
+    global retrain_status, model
+    retrain_status["running"] = True
+    retrain_status["last_error"] = None
+
+    try:
+        # Run the retrain script
+        result = subprocess.run(
+            ["python", "-m", "ml-api-deploy.retrain_from_live"],
+            cwd=Path(__file__).parent.parent,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minute timeout
+        )
+
+        if result.returncode == 0:
+            retrain_status["last_result"] = "success"
+            # Reload the model
+            load_model()
+            print("Model reloaded after retraining")
+        else:
+            retrain_status["last_result"] = "failed"
+            retrain_status["last_error"] = result.stderr[-500:] if result.stderr else "Unknown error"
+
+    except subprocess.TimeoutExpired:
+        retrain_status["last_result"] = "timeout"
+        retrain_status["last_error"] = "Retraining took too long (>5 min)"
+    except Exception as e:
+        retrain_status["last_result"] = "error"
+        retrain_status["last_error"] = str(e)
+    finally:
+        retrain_status["running"] = False
+        retrain_status["last_run"] = datetime.utcnow().isoformat()
+
+
+@app.post("/retrain")
+async def trigger_retrain(request: Request):
+    """
+    Trigger model retraining from live Supabase data.
+
+    This runs in the background and reloads the model when complete.
+    Check /retrain-status for progress.
+
+    Security: Requires RETRAIN_SECRET header to prevent abuse.
+    """
+    # Simple auth check
+    secret = os.getenv("RETRAIN_SECRET", "")
+    if secret:
+        provided = request.headers.get("X-Retrain-Secret", "")
+        if provided != secret:
+            raise HTTPException(status_code=403, detail="Invalid retrain secret")
+
+    if retrain_status["running"]:
+        return JSONResponse({
+            "status": "already_running",
+            "message": "Retraining is already in progress",
+        })
+
+    # Start retraining in background
+    thread = threading.Thread(target=run_retrain, daemon=True)
+    thread.start()
+
+    return JSONResponse({
+        "status": "started",
+        "message": "Retraining started in background. Check /retrain-status for progress.",
+    })
+
+
+@app.get("/retrain-status")
+async def get_retrain_status():
+    """Check the status of the last retraining job."""
+    return {
+        "running": retrain_status["running"],
+        "last_run": retrain_status["last_run"],
+        "last_result": retrain_status["last_result"],
+        "last_error": retrain_status["last_error"],
+        "model_loaded": model is not None,
+    }
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # RUN

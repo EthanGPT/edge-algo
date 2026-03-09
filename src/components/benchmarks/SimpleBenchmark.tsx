@@ -10,16 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import type { BotTrade, BotBacktestTrade, Bot } from '@/types/bots';
 
-// Backtest was run at these contract sizes
+// Backtest was run at these contract sizes (micros only)
 const BACKTEST_CONTRACTS: Record<string, number> = {
   MNQ: 4,
   MES: 4,
   MGC: 2,
-  ZB: 2,
-  ZN: 2,
-  '6E': 1,
-  '6J': 1,
 };
+
+// Only show these instruments
+const SUPPORTED_INSTRUMENTS = ['MNQ', 'MES', 'MGC'];
 
 interface SimpleBenchmarkProps {
   bots: Bot[];
@@ -192,15 +191,11 @@ export function SimpleBenchmark({ bots, liveTrades, backtestTrades }: SimpleBenc
     MNQ: 2,
     MES: 2,
     MGC: 2,
-    ZB: 1,
-    ZN: 1,
-    '6E': 1,
-    '6J': 1,
   });
 
-  // Get unique instruments
+  // Get unique instruments (filtered to supported only)
   const instruments = useMemo(() => {
-    const set = new Set(bots.map(b => b.instrument));
+    const set = new Set(bots.map(b => b.instrument).filter(i => SUPPORTED_INSTRUMENTS.includes(i)));
     return Array.from(set).sort();
   }, [bots]);
 

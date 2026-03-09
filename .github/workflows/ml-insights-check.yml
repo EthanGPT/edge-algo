@@ -1,0 +1,70 @@
+name: ML Insights Check
+
+on:
+  # Daily at 7am UTC (2am EST) - after market close
+  schedule:
+    - cron: '0 7 * * 1-5'
+
+  # Manual trigger
+  workflow_dispatch:
+
+jobs:
+  check-insights:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch ML Insights
+        id: insights
+        run: |
+          echo "Fetching ML learning insights..."
+
+          INSIGHTS=$(curl -s "${{ secrets.ML_API_URL }}/learning-insights")
+          echo "Raw insights: $INSIGHTS"
+
+          # Extract key metrics
+          TOTAL=$(echo "$INSIGHTS" | jq -r '.total_signals_with_outcomes // 0')
+          APPROVED_WR=$(echo "$INSIGHTS" | jq -r '.approved.win_rate // "0%"')
+          REJECTED_WR=$(echo "$INSIGHTS" | jq -r '.rejected.win_rate // "0%"')
+          EDGE=$(echo "$INSIGHTS" | jq -r '.filter_edge // "0%"')
+
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+          echo "approved_wr=$APPROVED_WR" >> $GITHUB_OUTPUT
+          echo "rejected_wr=$REJECTED_WR" >> $GITHUB_OUTPUT
+          echo "edge=$EDGE" >> $GITHUB_OUTPUT
+
+          # Check for recommendations
+          RECS=$(echo "$INSIGHTS" | jq -r '.recommendations | length // 0')
+          echo "recommendations=$RECS" >> $GITHUB_OUTPUT
+
+      - name: Generate Summary
+        run: |
+          echo "## ML Filter Performance" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Total Signals | ${{ steps.insights.outputs.total }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Approved Win Rate | ${{ steps.insights.outputs.approved_wr }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rejected Win Rate | ${{ steps.insights.outputs.rejected_wr }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Filter Edge** | **${{ steps.insights.outputs.edge }}** |" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.insights.outputs.recommendations }}" != "0" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Recommendations Available" >> $GITHUB_STEP_SUMMARY
+            echo "Check the ML Learning tab for suggested improvements." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check Filter Health
+        run: |
+          EDGE="${{ steps.insights.outputs.edge }}"
+          EDGE_NUM=$(echo "$EDGE" | sed 's/%//')
+
+          echo "Filter edge: $EDGE_NUM%"
+
+          # Warn if edge is negative (filter is hurting performance)
+          if (( $(echo "$EDGE_NUM < 0" | bc -l) )); then
+            echo "::warning::Filter edge is NEGATIVE ($EDGE). Model may need retraining!"
+          elif (( $(echo "$EDGE_NUM < 5" | bc -l) )); then
+            echo "::notice::Filter edge is low ($EDGE). Consider retraining soon."
+          else
+            echo "Filter edge is healthy ($EDGE)"
+          fi

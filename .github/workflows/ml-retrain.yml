@@ -1,0 +1,69 @@
+name: ML Model Retrain
+
+on:
+  # Weekly schedule - every Sunday at 6am UTC (1am EST)
+  schedule:
+    - cron: '0 6 * * 0'
+
+  # Manual trigger from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual retrain'
+        required: false
+        default: 'Manual trigger'
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger ML Retrain
+        run: |
+          echo "Triggering ML model retrain..."
+          echo "Reason: ${{ github.event.inputs.reason || 'Scheduled weekly retrain' }}"
+
+          RESPONSE=$(curl -s -X POST "${{ secrets.ML_API_URL }}/retrain" \
+            -H "X-Retrain-Secret: ${{ secrets.RETRAIN_SECRET }}" \
+            -H "Content-Type: application/json")
+
+          echo "Response: $RESPONSE"
+
+          # Check if started successfully
+          if echo "$RESPONSE" | grep -q '"status":"started"'; then
+            echo "Retrain started successfully!"
+          elif echo "$RESPONSE" | grep -q '"status":"already_running"'; then
+            echo "Retrain already in progress"
+          else
+            echo "Failed to start retrain"
+            exit 1
+          fi
+
+      - name: Wait for Retrain to Complete
+        run: |
+          echo "Waiting for retrain to complete..."
+
+          for i in {1..60}; do
+            sleep 10
+            STATUS=$(curl -s "${{ secrets.ML_API_URL }}/retrain-status")
+            echo "Status check $i: $STATUS"
+
+            if echo "$STATUS" | grep -q '"running":false'; then
+              if echo "$STATUS" | grep -q '"last_result":"success"'; then
+                echo "Retrain completed successfully!"
+                exit 0
+              else
+                echo "Retrain failed!"
+                exit 1
+              fi
+            fi
+          done
+
+          echo "Retrain timed out after 10 minutes"
+          exit 1
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "ML Retrain failed! Check the logs above for details."
+          # Add Slack/Discord notification here if desired

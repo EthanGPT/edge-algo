@@ -44,7 +44,7 @@ import { Link } from "react-router-dom";
 import { useBots } from "@/context/BotContext";
 import { useAuth } from "@/context/AuthContext";
 import { SimpleBenchmark } from "@/components/benchmarks";
-import { TradovateConnect } from "@/components/broker";
+import { MLLearning } from "@/components/ml";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -584,11 +584,12 @@ export default function BotAnalytics() {
 
       {/* Tabs */}
       <Tabs defaultValue="time" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="time">Time</TabsTrigger>
           <TabsTrigger value="direction">Direction</TabsTrigger>
           <TabsTrigger value="risk">Risk</TabsTrigger>
           <TabsTrigger value="benchmark">Benchmark</TabsTrigger>
+          <TabsTrigger value="ml">ML Learning</TabsTrigger>
         </TabsList>
 
         {/* TIME TAB */}
@@ -819,12 +820,11 @@ export default function BotAnalytics() {
             liveTrades={botTrades}
             backtestTrades={backtestTrades}
           />
+        </TabsContent>
 
-          {/* Tradovate Integration */}
-          <div className="pt-6 border-t border-border">
-            <h3 className="text-lg font-medium mb-4">Auto-Import Trades</h3>
-            <TradovateConnect />
-          </div>
+        {/* ML LEARNING TAB */}
+        <TabsContent value="ml" className="space-y-6">
+          <MLLearning />
         </TabsContent>
 
       </Tabs>
