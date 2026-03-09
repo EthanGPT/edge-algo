@@ -5,6 +5,7 @@ indicator("Key Level Breakout System", overlay=true, max_lines_count=500, max_la
 // ML FILTER INDICATORS - These are sent to the ML API for filtering decisions
 // ══════════════════════════════════════════════════════════════════════════════
 rsi_val = ta.rsi(close, 14)
+rsi_roc = rsi_val - rsi_val[5]  // RSI rate of change over 5 bars (momentum direction)
 [macd_line, macd_signal, macd_hist] = ta.macd(close, 12, 26, 9)
 [diplus, diminus, adx_val] = ta.dmi(14, 14)
 atr_val = ta.atr(14)
@@ -256,7 +257,7 @@ f_sendAlert(bool isLong, string lvlName, float lvlPrice) =>
         session = inLondon ? "London" : inNY ? "NY" : "Other"
         tpPrice = isLong ? lvlPrice + tpPts : lvlPrice - tpPts
         slPrice = isLong ? lvlPrice - slPts : lvlPrice + slPts
-        alertMsg = '{"ticker": "' + baseTicker + '", "action": "' + action + '", "level": "' + lvlName + '", "price": ' + str.tostring(lvlPrice) + ', "tp": ' + str.tostring(tpPrice) + ', "sl": ' + str.tostring(slPrice) + ', "session": "' + session + '", "rsi": ' + str.tostring(rsi_val, "#.##") + ', "macd": ' + str.tostring(macd_line, "#.####") + ', "macd_signal": ' + str.tostring(macd_signal, "#.####") + ', "adx": ' + str.tostring(adx_val, "#.##") + ', "atr_pct": ' + str.tostring(atr_pct, "#.###") + ', "time": "' + str.format_time(timenow, "yyyy-MM-dd\'T\'HH:mm:ssZ", tz) + '", "interval": "' + timeframe.period + '"}'
+        alertMsg = '{"ticker": "' + baseTicker + '", "action": "' + action + '", "level": "' + lvlName + '", "price": ' + str.tostring(lvlPrice) + ', "tp": ' + str.tostring(tpPrice) + ', "sl": ' + str.tostring(slPrice) + ', "session": "' + session + '", "rsi": ' + str.tostring(rsi_val, "#.##") + ', "rsi_roc": ' + str.tostring(rsi_roc, "#.##") + ', "macd": ' + str.tostring(macd_line, "#.####") + ', "macd_signal": ' + str.tostring(macd_signal, "#.####") + ', "adx": ' + str.tostring(adx_val, "#.##") + ', "atr_pct": ' + str.tostring(atr_pct, "#.###") + ', "time": "' + str.format_time(timenow, "yyyy-MM-dd\'T\'HH:mm:ssZ", tz) + '", "interval": "' + timeframe.period + '"}'
         alert(alertMsg, alert.freq_once_per_bar)
     true
 

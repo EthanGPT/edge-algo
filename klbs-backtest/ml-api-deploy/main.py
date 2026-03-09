@@ -45,6 +45,11 @@ class FilterConfig:
     rsi_overbought: float = 65.0  # Changed from 75 - tighter filter improves results
     rsi_oversold: float = 35.0   # Changed from 25 - tighter filter improves results
 
+    # Momentum filter - skip signals with momentum aligned to breakout direction
+    # Based on backtest: SHORTs with rising RSI and LONGs with falling RSI = higher loss rate
+    momentum_filter_enabled: bool = True
+    rsi_roc_threshold: float = 5.0  # Skip if RSI moved more than this in wrong direction
+
     # Position sizing thresholds (backtest: 80% WR at 65%+, 93% WR at 70%+)
     position_sizing_enabled: bool = True
     confidence_2x: float = 0.65  # 2 contracts at 65%+ confidence
@@ -85,6 +90,10 @@ def get_config_summary() -> Dict:
         "enabled_instruments": config.enabled_instruments,
         "enabled_sessions": config.enabled_sessions,
         "rsi_thresholds": f"{config.rsi_overbought}/{config.rsi_oversold}",
+        "momentum_filter": {
+            "enabled": config.momentum_filter_enabled,
+            "rsi_roc_threshold": config.rsi_roc_threshold,
+        },
         "position_sizing": {
             "enabled": config.position_sizing_enabled,
             "2x_at": f"{config.confidence_2x:.0%}",
@@ -424,6 +433,16 @@ def should_take_signal(signal: Dict) -> tuple:
         return False, f"RSI overbought ({rsi:.1f})", 0.0
     if action == "sell" and rsi < config.rsi_oversold:
         return False, f"RSI oversold ({rsi:.1f})", 0.0
+
+    # Momentum filter - skip if RSI momentum is aligned with potential breakout
+    # SHORTs with rising RSI = momentum pushing through resistance = BAD
+    # LONGs with falling RSI = momentum pushing through support = BAD
+    if config.momentum_filter_enabled:
+        rsi_roc = float(signal.get("rsi_roc", 0))
+        if action == "sell" and rsi_roc > config.rsi_roc_threshold:
+            return False, f"Momentum against SHORT (RSI rising +{rsi_roc:.1f})", 0.0
+        if action == "buy" and rsi_roc < -config.rsi_roc_threshold:
+            return False, f"Momentum against LONG (RSI falling {rsi_roc:.1f})", 0.0
 
     if model is None:
         return False, "Model not loaded", 0.0
