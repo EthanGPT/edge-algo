@@ -257,7 +257,7 @@ f_sendAlert(bool isLong, string lvlName, float lvlPrice) =>
         session = inLondon ? "London" : inNY ? "NY" : "Other"
         tpPrice = isLong ? lvlPrice + tpPts : lvlPrice - tpPts
         slPrice = isLong ? lvlPrice - slPts : lvlPrice + slPts
-        alertMsg = '{"ticker": "' + baseTicker + '", "action": "' + action + '", "level": "' + lvlName + '", "price": ' + str.tostring(lvlPrice) + ', "tp": ' + str.tostring(tpPrice) + ', "sl": ' + str.tostring(slPrice) + ', "session": "' + session + '", "rsi": ' + str.tostring(rsi_val, "#.##") + ', "rsi_roc": ' + str.tostring(rsi_roc, "#.##") + ', "macd": ' + str.tostring(macd_line, "#.####") + ', "adx": ' + str.tostring(adx_val, "#.##") + ', "atr_pct": ' + str.tostring(atr_pct, "#.###") + ', "time": "' + str.format_time(timenow, "yyyy-MM-dd\'T\'HH:mm:ssZ", tz) + '", "interval": "' + timeframe.period + '"}'
+        alertMsg = '{"ticker": "' + baseTicker + '", "action": "' + action + '", "level": "' + lvlName + '", "price": ' + str.tostring(lvlPrice) + ', "tp": ' + str.tostring(tpPrice) + ', "sl": ' + str.tostring(slPrice) + ', "session": "' + session + '", "rsi": ' + str.tostring(rsi_val, "#.##") + ', "rsi_roc": ' + str.tostring(rsi_roc, "#.##") + ', "macd": ' + str.tostring(macd_line, "#.####") + ', "macd_hist": ' + str.tostring(macd_hist, "#.####") + ', "plus_di": ' + str.tostring(diplus, "#.##") + ', "minus_di": ' + str.tostring(diminus, "#.##") + ', "adx": ' + str.tostring(adx_val, "#.##") + ', "atr_pct": ' + str.tostring(atr_pct, "#.###") + ', "time": "' + str.format_time(timenow, "yyyy-MM-dd\'T\'HH:mm:ssZ", tz) + '", "interval": "' + timeframe.period + '"}'
         alert(alertMsg, alert.freq_once_per_bar)
     true
 
