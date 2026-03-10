@@ -13,6 +13,7 @@ import Dashboard from "./pages/Dashboard";
 import TradeJournal from "./pages/TradeJournal";
 import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
+import BigMitchWorldPage from "./pages/BigMitchWorld";
 
 // Bot pages
 import Bots from "./pages/Bots";
@@ -111,6 +112,9 @@ const App = () => (
                     </AppLayout>
                   }
                 />
+
+                {/* Standalone Big Mitch's World - full screen, no layout */}
+                <Route path="/big-mitch" element={<BigMitchWorldPage />} />
 
                 <Route path="*" element={<NotFound />} />
               </Routes>

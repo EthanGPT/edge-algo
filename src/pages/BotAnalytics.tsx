@@ -39,6 +39,8 @@ import {
   History,
   Bot,
   Plus,
+  Gamepad2,
+  ExternalLink,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useBots } from "@/context/BotContext";
@@ -57,6 +59,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { LoginForm } from "@/components/auth/LoginForm";
+
 
 type DateRange = "all" | "ytd" | "90d" | "30d" | "7d";
 type InstrumentFilter = "all" | "MNQ" | "MES" | "MGC";
@@ -584,12 +587,13 @@ export default function BotAnalytics() {
 
       {/* Tabs */}
       <Tabs defaultValue="time" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="time">Time</TabsTrigger>
           <TabsTrigger value="direction">Direction</TabsTrigger>
           <TabsTrigger value="risk">Risk</TabsTrigger>
           <TabsTrigger value="benchmark">Benchmark</TabsTrigger>
           <TabsTrigger value="ml">ML Learning</TabsTrigger>
+          <TabsTrigger value="mitch" className="bg-gradient-to-r from-cyan-500/10 to-purple-500/10">Big Mitch</TabsTrigger>
         </TabsList>
 
         {/* TIME TAB */}
@@ -825,6 +829,54 @@ export default function BotAnalytics() {
         {/* ML LEARNING TAB */}
         <TabsContent value="ml" className="space-y-6">
           <MLLearning />
+        </TabsContent>
+
+        {/* BIG MITCH'S WORLD TAB */}
+        <TabsContent value="mitch" className="space-y-6">
+          <Card className="p-8 border-accent/20">
+            <div className="flex flex-col items-center justify-center text-center py-8">
+              {/* Big Mitch Logo */}
+              <div className="w-24 h-24 mb-6 border-2 border-accent flex items-center justify-center bg-accent/5">
+                <span className="text-accent text-4xl font-bold">M</span>
+              </div>
+
+              <h2 className="text-2xl font-bold mb-2">Big Mitch's World</h2>
+              <p className="text-muted-foreground mb-1">ML Signal Processing Center</p>
+              <p className="text-sm text-muted-foreground/70 mb-8 max-w-md">
+                Explore Big Mitch's office - an immersive 3D environment showcasing all 30 ML decision filters.
+                Walk through different rooms to understand how signals are processed.
+              </p>
+
+              {/* Feature highlights */}
+              <div className="grid grid-cols-3 gap-6 mb-8 text-sm">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-accent mb-1">5</div>
+                  <div className="text-muted-foreground">Rooms</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-accent mb-1">30</div>
+                  <div className="text-muted-foreground">Filters</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-accent mb-1">3D</div>
+                  <div className="text-muted-foreground">Walkthrough</div>
+                </div>
+              </div>
+
+              {/* Launch button */}
+              <Link to="/big-mitch">
+                <Button size="lg" className="gap-2 bg-accent text-accent-foreground hover:bg-accent/90">
+                  <Gamepad2 className="w-5 h-5" />
+                  Enter Big Mitch's World
+                  <ExternalLink className="w-4 h-4 ml-1" />
+                </Button>
+              </Link>
+
+              <p className="text-xs text-muted-foreground mt-4">
+                Opens in fullscreen mode • WASD to move • Mouse to look
+              </p>
+            </div>
+          </Card>
         </TabsContent>
 
       </Tabs>
