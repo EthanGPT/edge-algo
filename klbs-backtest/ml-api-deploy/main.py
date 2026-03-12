@@ -9,6 +9,7 @@ Deploy: Railway, Fly.io, or Render (~$5/month)
 """
 
 import os
+import sys
 import json
 import httpx
 import pickle
@@ -19,6 +20,15 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
 from fastapi import FastAPI, HTTPException, Request
+
+# Add news_sentiment to path for live sentiment features
+sys.path.insert(0, str(Path(__file__).parent.parent / "news_sentiment"))
+try:
+    from live_rss_feed import LiveNewsFetcher
+    SENTIMENT_ENABLED = True
+except ImportError:
+    SENTIMENT_ENABLED = False
+    print("WARNING: News sentiment module not found - using neutral values")
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -340,6 +350,16 @@ SESSION_WIN_RATES = {
 MODEL_PATH = Path(__file__).parent / "model.pkl"
 model = None
 
+# Sentiment fetcher (initialized lazily)
+sentiment_fetcher = None
+
+def get_sentiment_fetcher():
+    """Get or create sentiment fetcher instance."""
+    global sentiment_fetcher
+    if sentiment_fetcher is None and SENTIMENT_ENABLED:
+        sentiment_fetcher = LiveNewsFetcher(lookback_hours=4)
+    return sentiment_fetcher
+
 def load_model():
     global model
     if MODEL_PATH.exists():
@@ -353,25 +373,30 @@ def load_model():
 
 def extract_features(signal: Dict) -> np.ndarray:
     """
-    Extract 30 features matching training script v5.
+    Extract 34 features matching training script v6.
 
-    Features (30 total) - v5 with analysis-driven improvements:
+    Features (34 total) - v6 with sentiment integration:
     - Level one-hot (6): PDH, PDL, PMH, PML, LPH, LPL
     - Direction one-hot (2): LONG, SHORT
     - Session one-hot (2): London, NY
     - Day of week one-hot (5): Mon-Fri
     - Hour normalized (1)
-    - Hour_Score (1): Boost 9am, penalize 11am/13pm/15pm (NEW)
+    - Hour_Score (1): Boost 9am, penalize 11am/13pm/15pm
     - Instrument one-hot (3): MES, MNQ, MGC
     - RSI_Score (1): Direction-aware from backtest data
     - RSI_Momentum (1): RSI ROC aligned with direction
     - MACD_Score (1): Direction-aware MACD alignment
     - MACD_Hist (1): Momentum direction from histogram
-    - DI_Align (1): +DI/-DI alignment (STRENGTHENED 1.0/0.3)
-    - ATR_Score (1): Direction-aware ATR (NEW)
-    - Setup_Score (1): Penalize bad combos (NEW)
+    - DI_Align (1): +DI/-DI alignment
+    - ATR_Score (1): Direction-aware ATR
+    - Setup_Score (1): Penalize bad combos
     - Historical level WR (1)
     - Historical session WR (1)
+    - News_Sentiment (1): Rolling 4-hour sentiment (NEW)
+    - News_Volume (1): Article count normalized (NEW)
+    - Sentiment_Momentum (1): Sentiment rate of change (NEW)
+    - News_Volatility (1): Conflicting news indicator (NEW)
+    - Sentiment_Direction_Align (1): Does sentiment match trade? (NEW)
     """
     features = []
 
@@ -544,6 +569,85 @@ def extract_features(signal: Dict) -> np.ndarray:
     # 8. Historical win rates (2 features)
     features.append(LEVEL_WIN_RATES.get(level, 0.55))
     features.append(SESSION_WIN_RATES.get(session, 0.55))
+
+    # 9. News Sentiment features (5 features) - NEW in v6
+    # Get live sentiment from RSS feeds
+    fetcher = get_sentiment_fetcher()
+    inst = signal.get("ticker", "MNQ")
+
+    if fetcher is not None:
+        try:
+            sentiment_data = fetcher.get_current_sentiment(inst)
+            news_sentiment = sentiment_data.get('News_Sentiment', 0.5)
+            news_volume = sentiment_data.get('News_Volume', 0.0)
+            sentiment_momentum = sentiment_data.get('Sentiment_Momentum', 0.5)
+            news_volatility = sentiment_data.get('News_Volatility', 0.0)
+        except Exception as e:
+            # Fallback to neutral on any error
+            print(f"Sentiment fetch error: {e}")
+            news_sentiment = 0.5
+            news_volume = 0.0
+            sentiment_momentum = 0.5
+            news_volatility = 0.0
+    else:
+        # Sentiment disabled - use neutral values
+        news_sentiment = 0.5
+        news_volume = 0.0
+        sentiment_momentum = 0.5
+        news_volatility = 0.0
+
+    features.append(news_sentiment)      # News_Sentiment
+    features.append(news_volume)          # News_Volume
+    features.append(sentiment_momentum)   # Sentiment_Momentum
+    features.append(news_volatility)      # News_Volatility
+
+    # Sentiment_Direction_Align - Does sentiment match trade direction?
+    # Based on backtest analysis:
+    # - MNQ: +8.1% edge with strong sentiment alignment
+    # - MES: +5.6% edge with very negative sentiment
+    # - MGC: +6.3% edge with good alignment
+    if is_long:
+        # Positive sentiment helps longs
+        if news_sentiment > 0.65:
+            sent_align = 0.9
+        elif news_sentiment > 0.55:
+            sent_align = 0.75
+        elif news_sentiment < 0.35:
+            sent_align = 0.4  # Negative sentiment hurts longs
+        else:
+            sent_align = 0.6  # Neutral
+
+        # Rising momentum helps longs
+        if sentiment_momentum > 0.6:
+            sent_align = min(1.0, sent_align + 0.1)
+        elif sentiment_momentum < 0.4:
+            sent_align = max(0.3, sent_align - 0.1)
+    else:  # SHORT
+        # Negative sentiment helps shorts
+        if news_sentiment < 0.35:
+            sent_align = 0.9
+        elif news_sentiment < 0.45:
+            sent_align = 0.75
+        elif news_sentiment > 0.65:
+            sent_align = 0.4  # Positive sentiment hurts shorts
+        else:
+            sent_align = 0.6  # Neutral
+
+        # Falling momentum helps shorts
+        if sentiment_momentum < 0.4:
+            sent_align = min(1.0, sent_align + 0.1)
+        elif sentiment_momentum > 0.6:
+            sent_align = max(0.3, sent_align - 0.1)
+
+    # High volume during aligned sentiment = stronger signal
+    if news_volume > 0.7 and sent_align > 0.7:
+        sent_align = min(1.0, sent_align + 0.05)
+
+    # High volatility = uncertainty = reduce confidence
+    if news_volatility > 0.7:
+        sent_align = max(0.3, sent_align - 0.1)
+
+    features.append(sent_align)  # Sentiment_Direction_Align
 
     return np.array(features, dtype=np.float32)
 
@@ -978,10 +1082,11 @@ def run_retrain():
     retrain_status["last_error"] = None
 
     try:
-        # Run the retrain script
+        # Run the retrain script directly (can't use -m with dashes in folder name)
+        script_path = Path(__file__).parent / "retrain_from_live.py"
         result = subprocess.run(
-            ["python", "-m", "ml-api-deploy.retrain_from_live"],
-            cwd=Path(__file__).parent.parent,
+            [sys.executable, str(script_path)],
+            cwd=Path(__file__).parent,
             capture_output=True,
             text=True,
             timeout=300,  # 5 minute timeout

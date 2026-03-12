@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-KLBS ML Retraining - Learn from Live Decisions
+KLBS ML Retraining - Learn from Live Decisions (v6 SENTIMENT)
 
 This script:
 1. Pulls live signals + outcomes from Supabase
@@ -9,16 +9,29 @@ This script:
 4. Retrains the model on combined data
 5. Reports insights on what's working and what needs tuning
 
-Run: python -m ml-api-deploy.retrain_from_live
+IMPORTANT: Feature extraction MUST match main.py and train_model.py exactly!
+Currently: 34 features (v6 with sentiment)
+
+Run: python retrain_from_live.py
 """
 
 import os
+import sys
 import pickle
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
 from sklearn.ensemble import GradientBoostingClassifier
+
+# Add news_sentiment to path for sentiment features
+sys.path.insert(0, str(Path(__file__).parent.parent / "news_sentiment"))
+try:
+    from sentiment_features import SentimentFeatureEngineering, join_sentiment_to_trades
+    SENTIMENT_ENABLED = True
+except ImportError:
+    SENTIMENT_ENABLED = False
+    print("WARNING: Sentiment module not found - using neutral values")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -28,23 +41,37 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
 # How much to weight live data vs historical
-# Higher = more emphasis on recent live signals
 LIVE_DATA_WEIGHT = 3  # Each live signal counts as 3 historical ones
 
 # Minimum live signals with outcomes needed to retrain
 MIN_LIVE_SIGNALS = 10
 
-# Historical win rates (same as train_model.py)
+# Feature configuration - MUST MATCH main.py and train_model.py
+INSTRUMENTS = ["MES", "MNQ", "MGC"]
+LEVELS = ["PDH", "PDL", "PMH", "PML", "LPH", "LPL"]
+SESSIONS = ["London", "NY"]
+DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+
+# Historical win rates (same as main.py)
 LEVEL_WIN_RATES = {
     "PDH": 0.516, "PDL": 0.526, "PMH": 0.566,
     "PML": 0.601, "LPH": 0.544, "LPL": 0.561,
 }
 SESSION_WIN_RATES = {"London": 0.569, "NY": 0.544}
 
-INSTRUMENTS = ["MES", "MNQ", "MGC"]
-LEVELS = ["PDH", "PDL", "PMH", "PML", "LPH", "LPL"]
-SESSIONS = ["London", "NY"]
-DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+# Setup score mappings (same as main.py)
+BAD_SETUPS = {
+    "PDL_LONG_London": 0.2,
+    "PDH_SHORT_London": 0.2,
+    "PDH_SHORT_NY": 0.5,
+    "LPH_SHORT_London": 0.6,
+}
+GOOD_SETUPS = {
+    "PML_LONG_London": 1.0,
+    "PDL_LONG_NY": 0.95,
+    "LPL_LONG_London": 0.9,
+    "PMH_SHORT_London": 0.9,
+}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -84,18 +111,396 @@ def fetch_live_signals(client) -> pd.DataFrame:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# DECISION ANALYSIS - THE LEARNING INSIGHTS
+# FEATURE EXTRACTION - v6 (MUST MATCH main.py EXACTLY!)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def extract_features_from_live(row: dict) -> np.ndarray:
+    """
+    Extract 34 features from a live signal row.
+
+    CRITICAL: This MUST match main.py extract_features() exactly!
+
+    Features (34 total):
+    - Level one-hot (6): PDH, PDL, PMH, PML, LPH, LPL
+    - Direction one-hot (2): LONG, SHORT
+    - Session one-hot (2): London, NY
+    - Day of week one-hot (5): Mon-Fri
+    - Hour normalized (1)
+    - Hour_Score (1)
+    - Instrument one-hot (3): MES, MNQ, MGC
+    - RSI_Score (1): Direction-aware
+    - RSI_Momentum (1): Direction-aware
+    - MACD_Score (1): Direction-aware
+    - MACD_Hist (1): Direction-aware
+    - DI_Align (1): Direction-aware
+    - ATR_Score (1): Direction-aware
+    - Setup_Score (1)
+    - Level WR (1)
+    - Session WR (1)
+    - News_Sentiment (1): Rolling 4-hour sentiment
+    - News_Volume (1): Article count normalized
+    - Sentiment_Momentum (1): Sentiment rate of change
+    - News_Volatility (1): Conflicting news indicator
+    - Sentiment_Direction_Align (1): Does sentiment match trade?
+    """
+    features = []
+
+    # 1. Level one-hot (6 features)
+    level = row.get("level", "PDL")
+    features.extend([1.0 if level == l else 0.0 for l in LEVELS])
+
+    # 2. Direction one-hot (2 features)
+    action = row.get("action", "buy")
+    is_long = action == "buy"
+    features.append(1.0 if is_long else 0.0)
+    features.append(1.0 if not is_long else 0.0)
+
+    # 3. Session one-hot (2 features)
+    session = row.get("session", "NY")
+    features.append(1.0 if session == "London" else 0.0)
+    features.append(1.0 if session == "NY" else 0.0)
+
+    # 4. Day of week one-hot (5 features)
+    try:
+        ts = pd.Timestamp(row.get("timestamp", ""))
+        day = ts.strftime("%A")
+    except:
+        day = "Monday"
+    features.extend([1.0 if day == d else 0.0 for d in DAYS])
+
+    # 5. Hour normalized (1 feature)
+    try:
+        hour = pd.Timestamp(row.get("timestamp", "")).hour
+    except:
+        hour = 12
+    features.append(hour / 24.0)
+
+    # 5b. Hour_Score (1 feature) - MUST MATCH main.py
+    if hour == 9:
+        hour_score = 1.0
+    elif hour in [7, 8]:
+        hour_score = 0.8
+    elif hour in [10, 12]:
+        hour_score = 0.7
+    elif hour in [11, 13, 14, 15]:
+        hour_score = 0.3
+    else:
+        hour_score = 0.5
+    features.append(hour_score)
+
+    # 6. Instrument one-hot (3 features)
+    inst = row.get("ticker", "MNQ")
+    features.extend([1.0 if inst == i else 0.0 for i in INSTRUMENTS])
+
+    # 7. Technical indicators - v5 DIRECTION-AWARE SCORES
+    rsi = float(row.get("rsi", 50) or 50)
+    rsi_roc = float(row.get("rsi_roc", 0) or 0)
+    macd = float(row.get("macd", 0) or 0)
+    macd_hist = float(row.get("macd_hist", 0) or 0)
+    plus_di = float(row.get("plus_di", 25) or 25)
+    minus_di = float(row.get("minus_di", 25) or 25)
+    atr_pct = float(row.get("atr_pct", 0.5) or 0.5)
+
+    # RSI_SCORE (1 feature) - Direction-aware
+    if is_long:
+        if rsi < 30:
+            rsi_score = 0.3
+        elif rsi < 40:
+            rsi_score = 0.6
+        elif rsi < 50:
+            rsi_score = 0.7
+        elif rsi < 55:
+            rsi_score = 0.9
+        elif rsi < 65:
+            rsi_score = 1.0
+        else:
+            rsi_score = 0.9
+    else:  # SHORT
+        if rsi < 35:
+            rsi_score = 1.0
+        elif rsi < 50:
+            rsi_score = 0.8
+        elif rsi < 60:
+            rsi_score = 0.6
+        elif rsi < 70:
+            rsi_score = 0.4
+        else:
+            rsi_score = 0.3
+    features.append(rsi_score)
+
+    # RSI_MOMENTUM (1 feature) - Direction-aware
+    if is_long:
+        rsi_momentum = 1.0 if rsi_roc >= 0 else 0.7
+    else:
+        rsi_momentum = 0.9 if rsi_roc <= 0 else 0.6
+    features.append(rsi_momentum)
+
+    # MACD_SCORE (1 feature) - Direction-aware
+    if is_long:
+        macd_score = 0.9 if macd > 0 else 0.7
+    else:
+        macd_score = 0.8 if macd <= 0 else 0.6
+    features.append(macd_score)
+
+    # MACD_HIST (1 feature) - Direction-aware
+    if is_long:
+        macd_hist_score = 0.9 if macd_hist > 0 else 0.75
+    else:
+        macd_hist_score = 0.8 if macd_hist <= 0 else 0.6
+    features.append(macd_hist_score)
+
+    # DI_ALIGN (1 feature) - Direction-aware
+    if is_long:
+        di_align = 0.9 if plus_di > minus_di else 0.7
+    else:
+        di_align = 0.8 if minus_di > plus_di else 0.6
+    features.append(di_align)
+
+    # ATR_SCORE (1 feature) - Direction-aware
+    if is_long:
+        if atr_pct < 0.25:
+            atr_score = 0.8
+        elif atr_pct < 0.5:
+            atr_score = 0.75
+        else:
+            atr_score = 0.7
+    else:  # SHORT - high vol is best
+        if atr_pct < 0.25:
+            atr_score = 0.6
+        elif atr_pct < 0.5:
+            atr_score = 0.8
+        else:
+            atr_score = 1.0
+    features.append(atr_score)
+
+    # SETUP_SCORE (1 feature)
+    direction = "LONG" if is_long else "SHORT"
+    setup_key = f"{level}_{direction}_{session}"
+    if setup_key in BAD_SETUPS:
+        setup_score = BAD_SETUPS[setup_key]
+    elif setup_key in GOOD_SETUPS:
+        setup_score = GOOD_SETUPS[setup_key]
+    else:
+        setup_score = 0.7
+    features.append(setup_score)
+
+    # 8. Historical win rates (2 features)
+    features.append(LEVEL_WIN_RATES.get(level, 0.55))
+    features.append(SESSION_WIN_RATES.get(session, 0.55))
+
+    # 9. News Sentiment features (5 features) - v6
+    # For live signals, we need to get sentiment from live RSS or use neutral
+    # Since retraining happens after the fact, we use neutral values
+    # The live model will fetch real-time sentiment
+    news_sentiment = row.get('News_Sentiment', 0.5)
+    news_volume = row.get('News_Volume', 0.0)
+    sentiment_momentum = row.get('Sentiment_Momentum', 0.5)
+    news_volatility = row.get('News_Volatility', 0.0)
+
+    features.append(news_sentiment)      # News_Sentiment
+    features.append(news_volume)          # News_Volume
+    features.append(sentiment_momentum)   # Sentiment_Momentum
+    features.append(news_volatility)      # News_Volatility
+
+    # Sentiment_Direction_Align - matches main.py logic exactly
+    if is_long:
+        if news_sentiment > 0.65:
+            sent_align = 0.9
+        elif news_sentiment > 0.55:
+            sent_align = 0.75
+        elif news_sentiment < 0.35:
+            sent_align = 0.4
+        else:
+            sent_align = 0.6
+        if sentiment_momentum > 0.6:
+            sent_align = min(1.0, sent_align + 0.1)
+        elif sentiment_momentum < 0.4:
+            sent_align = max(0.3, sent_align - 0.1)
+    else:  # SHORT
+        if news_sentiment < 0.35:
+            sent_align = 0.9
+        elif news_sentiment < 0.45:
+            sent_align = 0.75
+        elif news_sentiment > 0.65:
+            sent_align = 0.4
+        else:
+            sent_align = 0.6
+        if sentiment_momentum < 0.4:
+            sent_align = min(1.0, sent_align + 0.1)
+        elif sentiment_momentum > 0.6:
+            sent_align = max(0.3, sent_align - 0.1)
+
+    if news_volume > 0.7 and sent_align > 0.7:
+        sent_align = min(1.0, sent_align + 0.05)
+    if news_volatility > 0.7:
+        sent_align = max(0.3, sent_align - 0.1)
+
+    features.append(sent_align)  # Sentiment_Direction_Align
+
+    return np.array(features, dtype=np.float32)
+
+
+def extract_features_from_historical(row: dict) -> np.ndarray:
+    """
+    Extract 34 features from historical backtest row.
+    Uses same logic as live but with different field names.
+
+    For historical data, sentiment features come from pre-processed
+    sentiment CSVs joined to trade data.
+    """
+    features = []
+
+    # 1. Level one-hot (6 features)
+    level = row.get("level", "PDL")
+    features.extend([1.0 if level == l else 0.0 for l in LEVELS])
+
+    # 2. Direction one-hot (2 features)
+    direction = row.get("direction", "LONG")
+    is_long = direction == "LONG"
+    features.append(1.0 if is_long else 0.0)
+    features.append(1.0 if not is_long else 0.0)
+
+    # 3. Session one-hot (2 features)
+    session = row.get("session", "NY")
+    features.append(1.0 if session == "London" else 0.0)
+    features.append(1.0 if session == "NY" else 0.0)
+
+    # 4. Day of week one-hot (5 features)
+    try:
+        day = pd.Timestamp(row["date"]).strftime("%A")
+    except:
+        day = "Monday"
+    features.extend([1.0 if day == d else 0.0 for d in DAYS])
+
+    # 5. Hour normalized (1 feature)
+    try:
+        hour = pd.Timestamp(row["date"]).hour
+    except:
+        hour = 12
+    features.append(hour / 24.0)
+
+    # 5b. Hour_Score (1 feature)
+    if hour == 9:
+        hour_score = 1.0
+    elif hour in [7, 8]:
+        hour_score = 0.8
+    elif hour in [10, 12]:
+        hour_score = 0.7
+    elif hour in [11, 13, 14, 15]:
+        hour_score = 0.3
+    else:
+        hour_score = 0.5
+    features.append(hour_score)
+
+    # 6. Instrument one-hot (3 features)
+    inst = row.get("ticker", "MNQ")
+    features.extend([1.0 if inst == i else 0.0 for i in INSTRUMENTS])
+
+    # 7. Technical indicators - DEFAULT VALUES for historical
+    # Historical CSVs don't have indicators, use neutral defaults
+    rsi = 50
+    rsi_roc = 0
+    macd = 0
+    macd_hist = 0
+    plus_di = 25
+    minus_di = 25
+    atr_pct = 0.5
+
+    # RSI_SCORE - use neutral since no data
+    rsi_score = 0.7 if is_long else 0.65
+    features.append(rsi_score)
+
+    # RSI_MOMENTUM - neutral
+    rsi_momentum = 0.85 if is_long else 0.75
+    features.append(rsi_momentum)
+
+    # MACD_SCORE - neutral
+    macd_score = 0.8 if is_long else 0.7
+    features.append(macd_score)
+
+    # MACD_HIST - neutral
+    macd_hist_score = 0.82 if is_long else 0.7
+    features.append(macd_hist_score)
+
+    # DI_ALIGN - neutral
+    di_align = 0.8 if is_long else 0.7
+    features.append(di_align)
+
+    # ATR_SCORE - neutral
+    atr_score = 0.75 if is_long else 0.8
+    features.append(atr_score)
+
+    # SETUP_SCORE
+    dir_str = "LONG" if is_long else "SHORT"
+    setup_key = f"{level}_{dir_str}_{session}"
+    if setup_key in BAD_SETUPS:
+        setup_score = BAD_SETUPS[setup_key]
+    elif setup_key in GOOD_SETUPS:
+        setup_score = GOOD_SETUPS[setup_key]
+    else:
+        setup_score = 0.7
+    features.append(setup_score)
+
+    # 8. Historical win rates (2 features)
+    features.append(LEVEL_WIN_RATES.get(level, 0.55))
+    features.append(SESSION_WIN_RATES.get(session, 0.55))
+
+    # 9. News Sentiment features (5 features) - v6
+    # For historical data, these come from pre-joined sentiment CSVs
+    news_sentiment = row.get('News_Sentiment', 0.5)
+    news_volume = row.get('News_Volume', 0.0)
+    sentiment_momentum = row.get('Sentiment_Momentum', 0.5)
+    news_volatility = row.get('News_Volatility', 0.0)
+
+    features.append(news_sentiment)      # News_Sentiment
+    features.append(news_volume)          # News_Volume
+    features.append(sentiment_momentum)   # Sentiment_Momentum
+    features.append(news_volatility)      # News_Volatility
+
+    # Sentiment_Direction_Align - matches main.py logic exactly
+    if is_long:
+        if news_sentiment > 0.65:
+            sent_align = 0.9
+        elif news_sentiment > 0.55:
+            sent_align = 0.75
+        elif news_sentiment < 0.35:
+            sent_align = 0.4
+        else:
+            sent_align = 0.6
+        if sentiment_momentum > 0.6:
+            sent_align = min(1.0, sent_align + 0.1)
+        elif sentiment_momentum < 0.4:
+            sent_align = max(0.3, sent_align - 0.1)
+    else:  # SHORT
+        if news_sentiment < 0.35:
+            sent_align = 0.9
+        elif news_sentiment < 0.45:
+            sent_align = 0.75
+        elif news_sentiment > 0.65:
+            sent_align = 0.4
+        else:
+            sent_align = 0.6
+        if sentiment_momentum < 0.4:
+            sent_align = min(1.0, sent_align + 0.1)
+        elif sentiment_momentum > 0.6:
+            sent_align = max(0.3, sent_align - 0.1)
+
+    if news_volume > 0.7 and sent_align > 0.7:
+        sent_align = min(1.0, sent_align + 0.05)
+    if news_volatility > 0.7:
+        sent_align = max(0.3, sent_align - 0.1)
+
+    features.append(sent_align)  # Sentiment_Direction_Align
+
+    return np.array(features, dtype=np.float32)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DECISION ANALYSIS
 # ══════════════════════════════════════════════════════════════════════════════
 
 def analyze_decisions(df: pd.DataFrame) -> dict:
-    """
-    Analyze ML decision quality.
-
-    Key questions:
-    - Approved signals: What % won? (Should be high)
-    - Rejected signals: What % won? (Should be low - we were right to reject)
-    - Where is the model making mistakes?
-    """
+    """Analyze ML decision quality."""
     print("\n2. Analyzing ML Decision Quality...")
     print("=" * 60)
 
@@ -106,11 +511,9 @@ def analyze_decisions(df: pd.DataFrame) -> dict:
         "recommendations": [],
     }
 
-    # Split by approved/rejected
     approved = df[df["approved"] == True]
     rejected = df[df["approved"] == False]
 
-    # Approved signal stats
     if len(approved) > 0:
         approved_wins = (approved["outcome"] == "WIN").sum()
         approved_wr = approved_wins / len(approved)
@@ -123,7 +526,6 @@ def analyze_decisions(df: pd.DataFrame) -> dict:
         print(f"\n   APPROVED SIGNALS: {len(approved)}")
         print(f"   Win Rate: {approved_wr:.1%} ({approved_wins}W / {len(approved) - approved_wins}L)")
 
-    # Rejected signal stats (hypothetical - what would have happened)
     if len(rejected) > 0:
         rejected_wins = (rejected["outcome"] == "WIN").sum()
         rejected_wr = rejected_wins / len(rejected)
@@ -136,164 +538,19 @@ def analyze_decisions(df: pd.DataFrame) -> dict:
         print(f"\n   REJECTED SIGNALS: {len(rejected)}")
         print(f"   Win Rate: {rejected_wr:.1%} ({rejected_wins}W / {len(rejected) - rejected_wins}L)")
 
-        # Find rejected signals that would have won (mistakes)
-        missed_wins = rejected[rejected["outcome"] == "WIN"]
-        if len(missed_wins) > 0:
-            print(f"\n   MISSED OPPORTUNITIES ({len(missed_wins)} rejected signals that won):")
-            for _, row in missed_wins.iterrows():
-                conf = row.get("confidence", 0) * 100
-                print(f"      - {row['ticker']} {row['level']} {row['session']} | Conf: {conf:.1f}% | RSI: {row.get('rsi', 'N/A')}")
-                insights["mistakes"].append({
-                    "type": "missed_win",
-                    "ticker": row["ticker"],
-                    "level": row["level"],
-                    "session": row["session"],
-                    "confidence": row.get("confidence", 0),
-                    "rsi": row.get("rsi"),
-                })
-
-    # Find approved signals that lost
-    if len(approved) > 0:
-        bad_approvals = approved[approved["outcome"] == "LOSS"]
-        if len(bad_approvals) > 0:
-            print(f"\n   BAD APPROVALS ({len(bad_approvals)} approved signals that lost):")
-            for _, row in bad_approvals.iterrows():
-                conf = row.get("confidence", 0) * 100
-                print(f"      - {row['ticker']} {row['level']} {row['session']} | Conf: {conf:.1f}% | RSI: {row.get('rsi', 'N/A')}")
-                insights["mistakes"].append({
-                    "type": "bad_approval",
-                    "ticker": row["ticker"],
-                    "level": row["level"],
-                    "session": row["session"],
-                    "confidence": row.get("confidence", 0),
-                    "rsi": row.get("rsi"),
-                })
-
-    # Calculate filter edge
     if len(approved) > 0 and len(rejected) > 0:
         edge = insights["approved"]["win_rate"] - insights["rejected"]["win_rate"]
         print(f"\n   FILTER EDGE: {edge:+.1%}")
         if edge > 0.10:
-            print("   Verdict: Filter is working well!")
+            print("   ✓ Filter is working well!")
         elif edge > 0:
-            print("   Verdict: Filter has some edge, room to improve")
+            print("   ~ Filter has some edge")
         else:
-            print("   Verdict: Filter may be rejecting good signals!")
+            print("   ✗ Filter may be rejecting good signals!")
             insights["recommendations"].append("Consider lowering confidence threshold")
 
-    # Breakdown by level
-    print("\n   WIN RATE BY LEVEL:")
-    for level in LEVELS:
-        level_df = df[df["level"] == level]
-        if len(level_df) >= 3:
-            wr = (level_df["outcome"] == "WIN").mean()
-            print(f"      {level}: {wr:.1%} ({len(level_df)} signals)")
-
-    # Breakdown by session
-    print("\n   WIN RATE BY SESSION:")
-    for session in SESSIONS:
-        sess_df = df[df["session"] == session]
-        if len(sess_df) >= 3:
-            wr = (sess_df["outcome"] == "WIN").mean()
-            print(f"      {session}: {wr:.1%} ({len(sess_df)} signals)")
-
-    # Breakdown by instrument
-    print("\n   WIN RATE BY INSTRUMENT:")
-    for inst in INSTRUMENTS:
-        inst_df = df[df["ticker"] == inst]
-        if len(inst_df) >= 3:
-            wr = (inst_df["outcome"] == "WIN").mean()
-            print(f"      {inst}: {wr:.1%} ({len(inst_df)} signals)")
-
     print("=" * 60)
-
     return insights
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# FEATURE EXTRACTION (same as train_model.py)
-# ══════════════════════════════════════════════════════════════════════════════
-
-def extract_features_from_live(row: dict) -> np.ndarray:
-    """Extract 29 features from a live signal row."""
-    features = []
-
-    # 1. Level one-hot (6)
-    level = row.get("level", "PDL")
-    features.extend([1.0 if level == l else 0.0 for l in LEVELS])
-
-    # 2. Direction one-hot (2)
-    action = row.get("action", "buy")
-    is_long = action == "buy"
-    features.append(1.0 if is_long else 0.0)
-    features.append(1.0 if not is_long else 0.0)
-
-    # 3. Session one-hot (2)
-    session = row.get("session", "NY")
-    features.append(1.0 if session == "London" else 0.0)
-    features.append(1.0 if session == "NY" else 0.0)
-
-    # 4. Day of week one-hot (5)
-    try:
-        ts = pd.Timestamp(row.get("timestamp", ""))
-        day = ts.strftime("%A")
-    except:
-        day = "Monday"
-    features.extend([1.0 if day == d else 0.0 for d in DAYS])
-
-    # 5. Hour normalized (1)
-    try:
-        hour = pd.Timestamp(row.get("timestamp", "")).hour
-    except:
-        hour = 12
-    features.append(hour / 24.0)
-
-    # 6. Instrument one-hot (3)
-    inst = row.get("ticker", "MNQ")
-    features.extend([1.0 if inst == i else 0.0 for i in INSTRUMENTS])
-
-    # 7. Technical indicators
-    rsi = float(row.get("rsi", 50) or 50)
-    macd = float(row.get("macd", 0) or 0)
-    adx = float(row.get("adx", 25) or 25)
-    atr_pct = float(row.get("atr_pct", 0.5) or 0.5)
-
-    # RSI ROC - use stored value if available
-    rsi_roc = float(row.get("rsi_roc", 0) or 0)
-
-    # RSI normalized (1)
-    features.append(rsi / 100.0)
-
-    # RSI ROC normalized (1)
-    features.append(np.clip(rsi_roc / 20.0, -1.0, 1.0))
-
-    # RSI balanced zone (1)
-    features.append(1.0 if 35 <= rsi <= 65 else 0.0)
-
-    # Momentum aligned (1)
-    if is_long:
-        momentum_aligned = 1.0 if rsi_roc >= -5 else 0.0
-    else:
-        momentum_aligned = 1.0 if rsi_roc <= 5 else 0.0
-    features.append(momentum_aligned)
-
-    # MACD bullish (1)
-    features.append(1.0 if macd > 0 else 0.0)
-
-    # ADX normalized (1)
-    features.append(adx / 100.0)
-
-    # ADX strong trend (1)
-    features.append(1.0 if adx > 25 else 0.0)
-
-    # ATR% normalized (1)
-    features.append(min(atr_pct / 2.0, 1.0))
-
-    # 8. Historical win rates (2)
-    features.append(LEVEL_WIN_RATES.get(level, 0.55))
-    features.append(SESSION_WIN_RATES.get(session, 0.55))
-
-    return np.array(features, dtype=np.float32)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -326,84 +583,19 @@ def load_historical_data():
     return signals
 
 
-def extract_features_from_historical(row: dict, ohlc: dict = None) -> np.ndarray:
-    """Extract features from historical backtest row."""
-    features = []
-
-    # 1. Level one-hot (6)
-    level = row.get("level", "PDL")
-    features.extend([1.0 if level == l else 0.0 for l in LEVELS])
-
-    # 2. Direction one-hot (2)
-    direction = row.get("direction", "LONG")
-    is_long = direction == "LONG"
-    features.append(1.0 if is_long else 0.0)
-    features.append(1.0 if not is_long else 0.0)
-
-    # 3. Session one-hot (2)
-    session = row.get("session", "NY")
-    features.append(1.0 if session == "London" else 0.0)
-    features.append(1.0 if session == "NY" else 0.0)
-
-    # 4. Day of week one-hot (5)
-    try:
-        day = pd.Timestamp(row["date"]).strftime("%A")
-    except:
-        day = "Monday"
-    features.extend([1.0 if day == d else 0.0 for d in DAYS])
-
-    # 5. Hour normalized (1)
-    try:
-        hour = pd.Timestamp(row["date"]).hour
-    except:
-        hour = 12
-    features.append(hour / 24.0)
-
-    # 6. Instrument one-hot (3)
-    inst = row.get("ticker", "MNQ")
-    features.extend([1.0 if inst == i else 0.0 for i in INSTRUMENTS])
-
-    # 7. Technical indicators (use defaults for historical - no OHLC lookup for speed)
-    rsi = 50
-    rsi_roc = 0
-    macd = 0
-    adx = 25
-    atr_pct = 0.5
-
-    features.append(rsi / 100.0)
-    features.append(np.clip(rsi_roc / 20.0, -1.0, 1.0))
-    features.append(1.0 if 35 <= rsi <= 65 else 0.0)
-    features.append(1.0)  # momentum aligned default
-    features.append(0.5)  # MACD neutral
-    features.append(adx / 100.0)
-    features.append(1.0 if adx > 25 else 0.0)
-    features.append(min(atr_pct / 2.0, 1.0))
-
-    # 8. Historical win rates (2)
-    features.append(LEVEL_WIN_RATES.get(level, 0.55))
-    features.append(SESSION_WIN_RATES.get(session, 0.55))
-
-    return np.array(features, dtype=np.float32)
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # TRAINING
 # ══════════════════════════════════════════════════════════════════════════════
 
 def prepare_training_data(live_df: pd.DataFrame, hist_df: pd.DataFrame):
-    """
-    Combine live and historical data for training.
-
-    Live data is weighted more heavily (LIVE_DATA_WEIGHT).
-    """
+    """Combine live and historical data for training."""
     print("\n4. Preparing training data...")
 
     X_list = []
     y_list = []
     weights_list = []
 
-    # Process live signals (ALL of them - both approved and rejected)
-    # This is how the model learns from its mistakes
+    # Process live signals
     print(f"   Processing {len(live_df)} live signals (weight={LIVE_DATA_WEIGHT}x)...")
     for _, row in live_df.iterrows():
         features = extract_features_from_live(row.to_dict())
@@ -431,7 +623,7 @@ def prepare_training_data(live_df: pd.DataFrame, hist_df: pd.DataFrame):
     y = np.array(y_list)
     weights = np.array(weights_list)
 
-    print(f"   Final dataset: {len(X):,} samples")
+    print(f"   Final dataset: {len(X):,} samples, {X.shape[1]} features")
     print(f"   Live signals contribute: {len(live_df) * LIVE_DATA_WEIGHT / weights.sum() * 100:.1f}% of weight")
 
     return X, y, weights
@@ -451,7 +643,6 @@ def train_model(X, y, weights):
         random_state=42,
     )
 
-    # Train with sample weights so live data has more influence
     model.fit(X, y, sample_weight=weights)
 
     # Quick validation
@@ -475,7 +666,7 @@ def train_model(X, y, weights):
 
 def main():
     print("=" * 70)
-    print("KLBS ML RETRAINING - Learning from Live Decisions")
+    print("KLBS ML RETRAINING - v5 Features (29 direction-aware)")
     print(f"Timestamp: {datetime.now().isoformat()}")
     print("=" * 70)
 
@@ -493,7 +684,7 @@ def main():
         print("Exiting without retraining.")
         return
 
-    # Analyze decisions - this is the learning insights
+    # Analyze decisions
     insights = analyze_decisions(live_df)
 
     # Load historical data
@@ -501,6 +692,14 @@ def main():
 
     # Prepare combined training data
     X, y, weights = prepare_training_data(live_df, hist_df)
+
+    # Verify feature count
+    expected_features = 34  # v6 with sentiment features
+    if X.shape[1] != expected_features:
+        print(f"\n!!! ERROR: Feature count mismatch!")
+        print(f"    Expected: {expected_features}, Got: {X.shape[1]}")
+        print("    This will break the model. Fix before continuing.")
+        return
 
     # Train
     model = train_model(X, y, weights)
@@ -520,6 +719,7 @@ def main():
     with open(model_path, "wb") as f:
         pickle.dump(model, f)
     print(f"   Saved new model to: {model_path}")
+    print(f"   Model expects {model.n_features_in_} features")
 
     # Summary
     print("\n" + "=" * 70)
@@ -533,15 +733,8 @@ def main():
         print(f"\nApproved signal accuracy: {insights['approved']['win_rate']:.1%}")
     if insights.get("rejected", {}).get("count", 0) > 0:
         print(f"Rejected signal win rate: {insights['rejected']['win_rate']:.1%}")
-        print(f"(Lower is better - means we're right to reject them)")
 
-    if insights.get("recommendations"):
-        print(f"\nRecommendations:")
-        for rec in insights["recommendations"]:
-            print(f"   - {rec}")
-
-    print("\nModel is now updated with live learning!")
-    print("Restart the API to use the new model.")
+    print("\nModel is now updated! Restart the API to use the new model.")
     print("=" * 70)
 
 

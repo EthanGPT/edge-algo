@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-KLBS ML Signal Filter - Training Script v4
+KLBS ML Signal Filter - Training Script v6 (SENTIMENT)
 
 Focused on MES/MNQ/MGC micros only.
 Uses CONTINUOUS weights for RSI, MACD, and ADX/DI based on backtest analysis.
+Added 5 news sentiment features from GDELT historical data.
 
-Key changes from v3:
-- RSI: Continuous score based on direction (not binary 35-65 zone)
-- MACD: Added histogram momentum (not just binary > 0)
-- ADX: Replaced ADX_Strong with DI alignment score
+Key changes from v5:
+- Added 5 sentiment features: News_Sentiment, News_Volume, Sentiment_Momentum,
+  News_Volatility, Sentiment_Direction_Align
+- Feature count: 29 -> 34
 
 Run: python -m ml-api-deploy.train_model
 """
 
 import os
+import sys
 import pickle
 import numpy as np
 import pandas as pd
@@ -21,6 +23,15 @@ from pathlib import Path
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import TimeSeriesSplit
 from datetime import datetime
+
+# Add news_sentiment to path for sentiment features
+sys.path.insert(0, str(Path(__file__).parent.parent / "news_sentiment"))
+try:
+    from sentiment_features import SentimentFeatureEngineering, join_sentiment_to_trades
+    SENTIMENT_ENABLED = True
+except ImportError:
+    SENTIMENT_ENABLED = False
+    print("WARNING: Sentiment module not found - using neutral values")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HISTORICAL WIN RATES (from 15,736 signals across 6+ years)
@@ -105,6 +116,32 @@ def load_data():
 
     signals = pd.concat(signals_list, ignore_index=True)
     signals = signals.sort_values("date").reset_index(drop=True)
+
+    # Join sentiment features from historical GDELT data
+    if SENTIMENT_ENABLED:
+        print("\n  Loading sentiment features...")
+        sentiment_eng = SentimentFeatureEngineering()
+        for inst in ALL_INSTRUMENTS:
+            # Load processed sentiment features
+            sent_features = sentiment_eng.create_features(
+                sentiment_eng.load_sentiment(inst)
+            )
+            if not sent_features.empty:
+                # Join to signals for this instrument
+                inst_mask = signals['instrument'] == inst
+                if inst_mask.any():
+                    inst_signals = signals[inst_mask].copy()
+                    inst_signals = join_sentiment_to_trades(
+                        inst_signals, sent_features, time_col='date'
+                    )
+                    # Update original signals with sentiment columns
+                    for col in ['News_Sentiment', 'News_Volume',
+                                'Sentiment_Momentum', 'News_Volatility']:
+                        if col in inst_signals.columns:
+                            signals.loc[inst_mask, col] = inst_signals[col].values
+                    print(f"    {inst}: Joined {inst_mask.sum()} signals with sentiment")
+    else:
+        print("  Sentiment disabled - using neutral values")
 
     return ohlc, signals
 
@@ -196,23 +233,28 @@ def extract_features(signal, ohlc, rolling_context=None):
     """
     Extract features for a signal.
 
-    Feature vector (30 features) - v5 with analysis-driven improvements:
+    Feature vector (34 features) - v6 with sentiment:
     - Level one-hot (6): PDH, PDL, PMH, PML, LPH, LPL
     - Direction one-hot (2): LONG, SHORT
     - Session one-hot (2): London, NY
     - Day of week one-hot (5): Mon-Fri
     - Hour normalized (1)
-    - Hour_Score (1): Boost 9am, penalize 11am/13pm/15pm (NEW)
+    - Hour_Score (1): Boost 9am, penalize 11am/13pm/15pm
     - Instrument one-hot (3): MES, MNQ, MGC
     - RSI_Score (1): Direction-aware continuous score
     - RSI_Momentum (1): RSI ROC aligned with direction
     - MACD_Score (1): Direction-aware MACD alignment
     - MACD_Hist (1): Momentum direction from histogram
-    - DI_Align (1): +DI/-DI alignment (STRENGTHENED to 1.0/0.3)
-    - ATR_Score (1): Direction-aware ATR (LONG=low ATR, SHORT=high ATR) (NEW)
-    - Setup_Score (1): Penalize bad level+direction+session combos (NEW)
+    - DI_Align (1): +DI/-DI alignment
+    - ATR_Score (1): Direction-aware ATR
+    - Setup_Score (1): Penalize bad level+direction+session combos
     - Historical level WR (1)
     - Historical session WR (1)
+    - News_Sentiment (1): Rolling 4-hour sentiment
+    - News_Volume (1): Article count normalized
+    - Sentiment_Momentum (1): Sentiment rate of change
+    - News_Volatility (1): Conflicting news indicator
+    - Sentiment_Direction_Align (1): Does sentiment match trade?
     """
     features = []
 
@@ -388,6 +430,53 @@ def extract_features(signal, ohlc, rolling_context=None):
     features.append(LEVEL_WIN_RATES.get(level, 0.55))
     features.append(SESSION_WIN_RATES.get(session, 0.55))
 
+    # 9. News Sentiment features (5 features) - v6
+    # Get from pre-joined sentiment data or use neutral
+    news_sentiment = signal.get('News_Sentiment', 0.5)
+    news_volume = signal.get('News_Volume', 0.0)
+    sentiment_momentum = signal.get('Sentiment_Momentum', 0.5)
+    news_volatility = signal.get('News_Volatility', 0.0)
+
+    features.append(news_sentiment)      # News_Sentiment
+    features.append(news_volume)          # News_Volume
+    features.append(sentiment_momentum)   # Sentiment_Momentum
+    features.append(news_volatility)      # News_Volatility
+
+    # Sentiment_Direction_Align - matches main.py logic exactly
+    if is_long:
+        if news_sentiment > 0.65:
+            sent_align = 0.9
+        elif news_sentiment > 0.55:
+            sent_align = 0.75
+        elif news_sentiment < 0.35:
+            sent_align = 0.4
+        else:
+            sent_align = 0.6
+        if sentiment_momentum > 0.6:
+            sent_align = min(1.0, sent_align + 0.1)
+        elif sentiment_momentum < 0.4:
+            sent_align = max(0.3, sent_align - 0.1)
+    else:  # SHORT
+        if news_sentiment < 0.35:
+            sent_align = 0.9
+        elif news_sentiment < 0.45:
+            sent_align = 0.75
+        elif news_sentiment > 0.65:
+            sent_align = 0.4
+        else:
+            sent_align = 0.6
+        if sentiment_momentum < 0.4:
+            sent_align = min(1.0, sent_align + 0.1)
+        elif sentiment_momentum > 0.6:
+            sent_align = max(0.3, sent_align - 0.1)
+
+    if news_volume > 0.7 and sent_align > 0.7:
+        sent_align = min(1.0, sent_align + 0.05)
+    if news_volatility > 0.7:
+        sent_align = max(0.3, sent_align - 0.1)
+
+    features.append(sent_align)  # Sentiment_Direction_Align
+
     return np.array(features, dtype=np.float32)
 
 
@@ -399,13 +488,16 @@ def get_feature_names():
     names.extend(["London", "NY"])  # 2
     names.extend(DAYS)  # 5
     names.append("Hour")  # 1
-    names.append("Hour_Score")  # 1 (NEW)
+    names.append("Hour_Score")  # 1
     names.extend(INSTRUMENTS)  # 3
     # Data-driven scores
     names.extend(["RSI_Score", "RSI_Momentum", "MACD_Score", "MACD_Hist", "DI_Align"])  # 5
-    names.extend(["ATR_Score", "Setup_Score"])  # 2 (NEW)
+    names.extend(["ATR_Score", "Setup_Score"])  # 2
     names.extend(["LevelWR", "SessWR"])  # 2
-    return names  # Total: 30
+    # Sentiment features (v6)
+    names.extend(["News_Sentiment", "News_Volume", "Sentiment_Momentum",
+                  "News_Volatility", "Sentiment_Direction_Align"])  # 5
+    return names  # Total: 34
 
 
 def train_model(X, y, signals):
@@ -485,6 +577,12 @@ def main():
     y = (signals["outcome"] == "WIN").astype(int).values
 
     print(f"   Feature matrix: {X.shape}")
+
+    # Handle any NaN values (from missing sentiment data)
+    nan_count = np.isnan(X).sum()
+    if nan_count > 0:
+        print(f"   Filling {nan_count} NaN values with neutral (0.5)")
+        X = np.nan_to_num(X, nan=0.5)
 
     # Train
     model = train_model(X, y, signals)
