@@ -292,10 +292,10 @@ def extract_features_from_live(row: dict) -> np.ndarray:
     # For live signals, we need to get sentiment from live RSS or use neutral
     # Since retraining happens after the fact, we use neutral values
     # The live model will fetch real-time sentiment
-    news_sentiment = row.get('News_Sentiment', 0.5)
-    news_volume = row.get('News_Volume', 0.0)
-    sentiment_momentum = row.get('Sentiment_Momentum', 0.5)
-    news_volatility = row.get('News_Volatility', 0.0)
+    news_sentiment = row.get('News_Sentiment') or 0.5
+    news_volume = row.get('News_Volume') or 0.0
+    sentiment_momentum = row.get('Sentiment_Momentum') or 0.5
+    news_volatility = row.get('News_Volatility') or 0.0
 
     features.append(news_sentiment)      # News_Sentiment
     features.append(news_volume)          # News_Volume
@@ -447,10 +447,10 @@ def extract_features_from_historical(row: dict) -> np.ndarray:
 
     # 9. News Sentiment features (5 features) - v6
     # For historical data, these come from pre-joined sentiment CSVs
-    news_sentiment = row.get('News_Sentiment', 0.5)
-    news_volume = row.get('News_Volume', 0.0)
-    sentiment_momentum = row.get('Sentiment_Momentum', 0.5)
-    news_volatility = row.get('News_Volatility', 0.0)
+    news_sentiment = row.get('News_Sentiment') or 0.5
+    news_volume = row.get('News_Volume') or 0.0
+    sentiment_momentum = row.get('Sentiment_Momentum') or 0.5
+    news_volatility = row.get('News_Volatility') or 0.0
 
     features.append(news_sentiment)      # News_Sentiment
     features.append(news_volume)          # News_Volume
