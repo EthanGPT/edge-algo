@@ -367,6 +367,37 @@ def get_sentiment_fetcher():
         sentiment_fetcher = LiveNewsFetcher(lookback_hours=4)
     return sentiment_fetcher
 
+# Background sentiment refresh (every 30 minutes)
+import threading
+
+_sentiment_refresh_timer = None
+
+def refresh_sentiment_background():
+    """Refresh sentiment cache for all instruments in background."""
+    global _sentiment_refresh_timer
+    fetcher = get_sentiment_fetcher()
+    if fetcher:
+        print(f"\n[{datetime.utcnow().isoformat()}] Refreshing sentiment cache...")
+        fetcher.refresh_all()
+        print("Sentiment cache refreshed.")
+
+    # Schedule next refresh in 30 minutes
+    _sentiment_refresh_timer = threading.Timer(1800, refresh_sentiment_background)  # 1800 seconds = 30 min
+    _sentiment_refresh_timer.daemon = True
+    _sentiment_refresh_timer.start()
+
+def start_sentiment_scheduler():
+    """Start the background sentiment refresh scheduler."""
+    if SENTIMENT_ENABLED:
+        print("Starting sentiment background scheduler (every 30 min)...")
+        # Initial refresh
+        threading.Thread(target=lambda: get_sentiment_fetcher().refresh_all(), daemon=True).start()
+        # Schedule recurring refresh
+        global _sentiment_refresh_timer
+        _sentiment_refresh_timer = threading.Timer(1800, refresh_sentiment_background)
+        _sentiment_refresh_timer.daemon = True
+        _sentiment_refresh_timer.start()
+
 def load_model():
     global model
     if MODEL_PATH.exists():
@@ -584,7 +615,7 @@ def extract_features(signal: Dict) -> np.ndarray:
 
     if fetcher is not None:
         try:
-            sentiment_data = fetcher.get_current_sentiment(inst)
+            sentiment_data = fetcher.get_current_sentiment(inst, use_cache_only=True)
             news_sentiment = sentiment_data.get('News_Sentiment', 0.5)
             news_volume = sentiment_data.get('News_Volume', 0.0)
             sentiment_momentum = sentiment_data.get('Sentiment_Momentum', 0.5)
@@ -754,6 +785,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     load_model()
+    start_sentiment_scheduler()  # Background refresh every 30 min
     print("ML Signal Filter started")
     print(f"Config: {get_config_summary()}")
 
@@ -823,12 +855,12 @@ async def receive_signal(request: Request):
     # Entry signal - ML decision
     approved, reason, confidence = should_take_signal(payload)
 
-    # Capture sentiment for logging (v6)
+    # Capture sentiment for logging (v6) - use cache only, never block signal
     sentiment_data = None
     fetcher = get_sentiment_fetcher()
     if fetcher:
         try:
-            sentiment_data = fetcher.get_current_sentiment(payload.get("ticker", "MNQ"))
+            sentiment_data = fetcher.get_current_sentiment(payload.get("ticker", "MNQ"), use_cache_only=True)
         except Exception as e:
             print(f"Sentiment capture error: {e}")
 

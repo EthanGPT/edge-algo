@@ -75,7 +75,23 @@ class LiveNewsFetcher:
         self.lookback_hours = lookback_hours
         self._cache: Dict[str, dict] = {}
         self._cache_time: Dict[str, datetime] = {}
-        self._cache_ttl = timedelta(minutes=15)  # Cache for 15 min
+        self._cache_ttl = timedelta(minutes=60)  # Cache for 60 min (background refresh every 30)
+
+    def refresh_all(self) -> Dict[str, dict]:
+        """
+        Refresh sentiment cache for all instruments.
+        Called by background scheduler every 30 minutes.
+        Returns dict of instrument -> sentiment data.
+        """
+        results = {}
+        for instrument in INSTRUMENT_FEEDS.keys():
+            try:
+                # Force fresh fetch (not use_cache_only)
+                results[instrument] = self.get_current_sentiment(instrument, use_cache_only=False)
+                print(f"  Refreshed {instrument}: sentiment={results[instrument]['News_Sentiment']:.2f}")
+            except Exception as e:
+                print(f"  Error refreshing {instrument}: {e}")
+        return results
 
     def fetch_rss(self, url: str, max_articles: int = 50) -> List[dict]:
         """
@@ -165,7 +181,7 @@ class LiveNewsFetcher:
 
         return relevant
 
-    def get_current_sentiment(self, instrument: str) -> Dict[str, float]:
+    def get_current_sentiment(self, instrument: str, use_cache_only: bool = False) -> Dict[str, float]:
         """
         Get current sentiment features for an instrument
 
@@ -174,12 +190,29 @@ class LiveNewsFetcher:
         - News_Volume: 0-1 normalized article count
         - Sentiment_Momentum: 0-1 sentiment change
         - News_Volatility: 0-1 sentiment variance
+
+        Args:
+            use_cache_only: If True, return cached value immediately (never block on fetch)
         """
         # Check cache
         cache_key = instrument
         if cache_key in self._cache:
             if datetime.utcnow() - self._cache_time[cache_key] < self._cache_ttl:
                 return self._cache[cache_key]
+            elif use_cache_only:
+                # Return stale cache rather than blocking
+                return self._cache[cache_key]
+
+        # No cache and use_cache_only - return neutral
+        if use_cache_only:
+            return {
+                'News_Sentiment': 0.5,
+                'News_Volume': 0.0,
+                'Sentiment_Momentum': 0.5,
+                'News_Volatility': 0.0,
+                'article_count': 0,
+                'latest_headline': None
+            }
 
         articles = self.get_articles(instrument)
 
