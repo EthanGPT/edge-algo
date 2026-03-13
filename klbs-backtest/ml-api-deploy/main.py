@@ -21,14 +21,14 @@ from dataclasses import dataclass, field
 
 from fastapi import FastAPI, HTTPException, Request
 
-# Add news_sentiment to path for live sentiment features
-sys.path.insert(0, str(Path(__file__).parent.parent / "news_sentiment"))
+# Import live sentiment features (local file in deploy folder)
 try:
     from live_rss_feed import LiveNewsFetcher
     SENTIMENT_ENABLED = True
-except ImportError:
+    print("Sentiment module loaded successfully")
+except ImportError as e:
     SENTIMENT_ENABLED = False
-    print("WARNING: News sentiment module not found - using neutral values")
+    print(f"WARNING: News sentiment module not found - using neutral values: {e}")
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
