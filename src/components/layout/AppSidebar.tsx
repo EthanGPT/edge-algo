@@ -38,6 +38,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useJournal, SyncStatus } from "@/context/JournalContext";
 import { cn } from "@/lib/utils";
 
@@ -133,6 +135,11 @@ export function AppSidebar() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState(false);
+
+  const ML_PASSWORD = "klbs2024"; // Simple password
 
   const fetchAccounts = async () => {
     try {
@@ -166,8 +173,25 @@ export function AppSidebar() {
   };
 
   useEffect(() => {
-    if (showSettings) fetchAccounts();
-  }, [showSettings]);
+    if (showSettings && authenticated) fetchAccounts();
+  }, [showSettings, authenticated]);
+
+  const handleAuth = () => {
+    if (password === ML_PASSWORD) {
+      setAuthenticated(true);
+      setAuthError(false);
+      fetchAccounts();
+    } else {
+      setAuthError(true);
+    }
+  };
+
+  const closeSettings = () => {
+    setShowSettings(false);
+    setAuthenticated(false);
+    setPassword("");
+    setAuthError(false);
+  };
 
   return (
     <Sidebar className="border-r-0">
@@ -236,67 +260,87 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="px-4 pb-4 space-y-2">
-        {/* ML Settings Button */}
-        <button
-          onClick={() => setShowSettings(true)}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors hover:bg-sidebar-accent cursor-pointer text-sidebar-muted"
-        >
-          <Settings2 className="h-3.5 w-3.5" />
-          <span>ML Settings</span>
-        </button>
+        {/* Settings gear icon */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={syncStatus !== 'disabled' ? triggerSync : undefined}
+            disabled={syncStatus === 'disabled' || syncStatus === 'syncing'}
+            className={cn(
+              "flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors",
+              syncStatus !== 'disabled'
+                ? "hover:bg-sidebar-accent cursor-pointer"
+                : "cursor-default opacity-60"
+            )}
+          >
+            <SyncIcon className={cn("h-3.5 w-3.5", sync.color, syncStatus === 'syncing' && "animate-spin")} />
+            <span className={sync.color}>{sync.label}</span>
+          </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-sidebar-muted"
+          >
+            <Settings2 className="h-4 w-4" />
+          </button>
+        </div>
 
-        {/* Sync Status */}
-        <button
-          onClick={syncStatus !== 'disabled' ? triggerSync : undefined}
-          disabled={syncStatus === 'disabled' || syncStatus === 'syncing'}
-          className={cn(
-            "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors",
-            syncStatus !== 'disabled'
-              ? "hover:bg-sidebar-accent cursor-pointer"
-              : "cursor-default opacity-60"
-          )}
-        >
-          <SyncIcon className={cn("h-3.5 w-3.5", sync.color, syncStatus === 'syncing' && "animate-spin")} />
-          <span className={sync.color}>{sync.label}</span>
-        </button>
       </SidebarFooter>
 
       {/* ML Settings Dialog */}
-      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+      <Dialog open={showSettings} onOpenChange={closeSettings}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings2 className="h-5 w-5" />
-              ML Bot Settings
+              {authenticated ? "Account Controls" : "Enter Password"}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            {loading ? (
-              <div className="flex justify-center py-4">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              accounts.map((account) => (
-                <div
-                  key={account.name}
-                  className={cn(
-                    "flex items-center justify-between p-3 rounded-lg border",
-                    account.enabled ? "bg-card" : "bg-destructive/5 border-destructive/20 opacity-60"
-                  )}
-                >
-                  <span className="text-sm font-medium">{account.name}</span>
-                  <Switch
-                    checked={account.enabled}
-                    disabled={toggling === account.name}
-                    onCheckedChange={(checked) => toggleAccount(account.name, checked)}
-                  />
+
+          {!authenticated ? (
+            <div className="space-y-3">
+              <Input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAuth()}
+                className={authError ? "border-destructive" : ""}
+              />
+              {authError && (
+                <p className="text-xs text-destructive">Incorrect password</p>
+              )}
+              <Button onClick={handleAuth} className="w-full">
+                Unlock
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {loading ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
-              ))
-            )}
-            <p className="text-xs text-muted-foreground text-center pt-2">
-              Toggle accounts on/off. Changes apply immediately.
-            </p>
-          </div>
+              ) : (
+                accounts.map((account) => (
+                  <div
+                    key={account.name}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-lg border",
+                      account.enabled ? "bg-card" : "bg-destructive/5 border-destructive/20 opacity-60"
+                    )}
+                  >
+                    <span className="text-sm font-medium">{account.name}</span>
+                    <Switch
+                      checked={account.enabled}
+                      disabled={toggling === account.name}
+                      onCheckedChange={(checked) => toggleAccount(account.name, checked)}
+                    />
+                  </div>
+                ))
+              )}
+              <p className="text-xs text-muted-foreground text-center pt-2">
+                Changes apply immediately.
+              </p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </Sidebar>
