@@ -1,9 +1,2 @@
-# Force Railway to use Python
-[phases.build]
-cmds = ["pip install -r requirements.txt"]
-
-[start]
-cmd = "uvicorn main:app --host 0.0.0.0 --port $PORT"
-
-# Explicitly set Python provider
+# Force Python provider
 providers = ["python"]
